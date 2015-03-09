@@ -432,8 +432,10 @@ class TreeNode():
     def ucb1_urgency(self, n0):
         return float(self.w+self.pw)/(self.v+self.pv) + UCB1_C * math.sqrt(2*math.log(n0) / (self.v+1))
 
-    def child_values(self):
-        return [float(node.w+1)/(node.v+1) for node in self.children]
+    def winrate(self):
+        if self.v == 0:
+            return 0  # what else?
+        return float(self.w) / self.v
 
     def best_move(self):
         """ best move is the most simulated one """
@@ -441,7 +443,7 @@ class TreeNode():
 
 
 def str_tree_summary(tree, sims):
-    best_nodes = [tree.children[i] for i, u in sorted(enumerate(tree.child_values()), key=itemgetter(1), reverse=True)[:5]]
+    best_nodes = [tree.children[i] for i, u in sorted(enumerate([n.v for n in tree.children]), key=itemgetter(1), reverse=True)[:5]]
     best_seq = []
     node = tree
     while node is not None:
@@ -449,10 +451,10 @@ def str_tree_summary(tree, sims):
         if node.children is None:
             break
         node = node.best_move()
-    return ('[%4d] winrate %.3f | best %s | seq %s' %
-            (sims, 1.0-float(tree.w)/tree.v,
-             ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), float(n.w+1)/(n.v+1)) for n in best_nodes]),
-             ' '.join([str_coord(c) for c in best_seq[1:5]]),
+    return ('[%4d] winrate %.3f | seq %s | can %s' %
+            (sims, 1.0 - tree.winrate(),
+             ' '.join([str_coord(c) for c in best_seq[1:6]]),
+             ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes]),
              ))
 
 

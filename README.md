@@ -16,6 +16,14 @@ extra work, though).  This is not meant to be a competitive engine;
 simplicity and clear code is preferred over optimization (after all,
 it's in Python!).
 
+Note that while all strong Computer Go programs currently use the MCTS
+algorithm, there are many particular variants, differing particularly
+regarding the playout policy mechanics and the way tree node priors
+are constructed and incorporated (this is not about individual heuristics
+but the way they are integrated).  Michi uses the MCTS flavor used in
+Pachi and Fuego, but e.g. Zen and CrazyStone take quite a different
+approach to this.
+
 The ethymology of Michi is "Minimalistic Pachi".  If you would like
 to try your hands at hacking a competitive Computer Go engine, try Pachi! :-)
 Michi has been inspired by Sunfish - a minimalistic chess engine.

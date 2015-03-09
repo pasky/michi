@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env pypy
 # -*- coding: utf-8 -*-
 
 # The below is currently not true:

@@ -28,6 +28,7 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
 UCB1_C = 0.1
+RAVE_EQUIV = 1500
 EXPAND_VISITS = 2
 PRIOR_EVEN = 3
 PRIOR_CAPTURE = 5
@@ -358,9 +359,11 @@ def gen_playout_moves(pos):
         yield (c, 'random')
 
 
-def mcplayout(pos, disp=False):
-    """ Start a Monte Carlo playout from a given position, return score
-    for to-play player at the starting position"""
+def mcplayout(pos, amaf_map, disp=False):
+    """ Start a Monte Carlo playout from a given position,
+    return score for to-play player at the starting position;
+    amaf_map is board-sized scratchpad recording who played at a given
+    position first """
     start_n = pos.n
     passes = 0
     while passes < 2 and pos.n < MAX_GAME_LEN:
@@ -370,6 +373,8 @@ def mcplayout(pos, disp=False):
         for c, kind in gen_playout_moves(pos):
             pos2 = pos.move(c)
             if pos2 is not None:
+                if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
+                    amaf_map[c] = 1 if pos.n % 2 == 0 else -1
                 break
         if pos2 is None:  # no valid moves, pass
             pos = pos.pass_move()
@@ -387,7 +392,7 @@ def mcbenchmark(n):
     """ run n Monte-Carlo playouts from empty position, return avg. score """
     sumscore = 0
     for i in range(0, n):
-        sumscore += mcplayout(empty_position())
+        sumscore += mcplayout(empty_position(), W*W*[0])
     return float(sumscore) / n
 
 
@@ -397,6 +402,7 @@ class TreeNode():
     """ Monte-Carlo tree node;
     v is #visits, w is #wins for to-play (expected reward is w/v)
     pv, pw are prior values (node value = w/v + pw/pv)
+    av, aw are amaf values ("all moves as first", used for the RAVE tree policy)
     children is None for leaf nodes """
     def __init__(self, pos):
         self.pos = pos
@@ -404,6 +410,8 @@ class TreeNode():
         self.w = 0
         self.pv = PRIOR_EVEN
         self.pw = PRIOR_EVEN
+        self.av = 0
+        self.aw = 0
         self.children = None
 
     def expand(self):
@@ -430,7 +438,17 @@ class TreeNode():
             self.children.append(TreeNode(self.pos.pass_move()))
 
     def ucb1_urgency(self, n0):
-        return float(self.w+self.pw)/(self.v+self.pv) + UCB1_C * math.sqrt(2*math.log(n0) / (self.v+1))
+        expectation = float(self.w+self.pw)/(self.v+self.pv)
+        return expectation + UCB1_C * math.sqrt(2*math.log(n0) / (self.v+1))
+
+    def rave_urgency(self):
+        v = self.v + self.pv
+        expectation = float(self.w+self.pw) / v
+        if self.av == 0:
+            return expectation
+        rave_expectation = float(self.aw) / self.av
+        beta = self.av / (self.av + v + float(v) * self.av / RAVE_EQUIV)
+        return beta * rave_expectation + (1-beta) * expectation
 
     def winrate(self):
         if self.v == 0:
@@ -465,6 +483,8 @@ def tree_search(tree, n, disp=False):
         tree.expand()
 
     for i in range(n):
+        amaf_map = W*W*[0]
+
         # Descend to the leaf
         tree.v += 1
         nodes = [tree]
@@ -473,7 +493,8 @@ def tree_search(tree, n, disp=False):
             if disp:  nodes[-1].pos.print_board()
 
             # Pick the most urgent child
-            urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
+            # urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
+            urgencies = [node.rave_urgency() for node in nodes[-1].children]
             if disp:
                 nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in enumerate(urgencies)]
                 print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
@@ -481,23 +502,37 @@ def tree_search(tree, n, disp=False):
             ci, u = max(enumerate(urgencies), key=itemgetter(1))
 
             nodes.append(nodes[-1].children[ci])
-            if nodes[-1].pos.last is None:
+
+            c = nodes[-1].pos.last
+            if c is None:
                 passes += 1
             else:
                 passes = 0
+                if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
+                    amaf_map[c] = 1 if nodes[-2].pos.n % 2 == 0 else -1
 
-            nodes[-1].v += 1
+            nodes[-1].v += 1  # updating visits on the way down represents "virtual loss", relevant for parallelization
             if nodes[-1].children is None and nodes[-1].v >= EXPAND_VISITS:
                 nodes[-1].expand()
 
         # Run a simulation
         if disp:  print('** SIMULATION **')
-        score = mcplayout(nodes[-1].pos, disp=disp)
+        score = mcplayout(nodes[-1].pos, amaf_map, disp=disp)
 
         # Back-propagate the result
         for node in reversed(nodes):
             if disp:  print('updating', str_coord(node.pos.last), score < 0)
             node.w += score < 0  # score is for to-play, node statistics for just-played
+            # Update the node children AMAF stats with moves we made
+            # with their color
+            amaf_map_value = 1 if node.pos.n % 2 == 0 else -1
+            if node.children is not None:
+                for child in node.children:
+                    if child.pos.last is None:
+                        continue
+                    if amaf_map[child.pos.last] == amaf_map_value:
+                        child.aw += score > 0  # reversed perspective
+                        child.av += 1
             score = -score
 
         if i > 0 and i % REPORT_PERIOD == 0:
@@ -564,6 +599,6 @@ def game_io():
 
 if __name__ == "__main__":
     game_io()
-    # print(mcplayout(empty_position(), disp=True))
+    # print(mcplayout(empty_position(), W*W*[0], disp=True))
     # print(mcbenchmark(20))
     # tree_search(TreeNode(pos=empty_position()), 1000, disp=False).pos.print_board()

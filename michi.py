@@ -594,7 +594,7 @@ def tree_search(tree, n, disp=False):
 def parse_coord(s):
     if s == 'pass':
         return None
-    return W+1 + (N - int(s[1])) * W + colstr.index(s[0].upper())
+    return W+1 + (N - int(s[1:])) * W + colstr.index(s[0].upper())
 
 
 def str_coord(c):

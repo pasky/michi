@@ -318,20 +318,32 @@ def empty_position():
 
 # pattern routines
 
-def pat_rot90(p):
-    return [p[2][0]+p[1][0]+p[0][0], p[2][1]+p[1][1]+p[0][1], p[2][2]+p[1][2]+p[0][2]]
-def pat_vertflip(p):
-    return [p[2], p[1], p[0]]
-def pat_horizflip(p):
-    return [l[::-1] for l in p]
-def pat_swapcolors(p):
-    return [l.replace('X', 'Z').replace('x', 'z').replace('O', 'X').replace('o', 'x').replace('Z', 'O').replace('z', 'o') for l in p]
-def pat_regex(p):
-    return ''.join([l.replace('.', '\\.').replace('?', '.').replace('x', '[^X]').replace('O', 'x').replace('o', '[^x]') for l in p])
-# A gigantic regex that will match the 3x3 pattern on move neighborhood
-# strings, accounting for all possible transpositions
-patternre_src = [pat_regex(p) for p in patternsrc for p in [p, pat_rot90(p)] for p in [p, pat_vertflip(p)] for p in [p, pat_horizflip(p)] for p in [p, pat_swapcolors(p)]]
-patternre = re.compile('|'.join(patternre_src))
+def pat_expand(pat):
+    """ All possible neighborhood configurations matching a given pattern """
+    def pat_rot90(p):
+        return [p[2][0] + p[1][0] + p[0][0], p[2][1] + p[1][1] + p[0][1], p[2][2] + p[1][2] + p[0][2]]
+    def pat_vertflip(p):
+        return [p[2], p[1], p[0]]
+    def pat_horizflip(p):
+        return [l[::-1] for l in p]
+    def pat_swapcolors(p):
+        return [l.replace('X', 'Z').replace('x', 'z').replace('O', 'X').replace('o', 'x').replace('Z', 'O').replace('z', 'o') for l in p]
+    def pat_wildexp(p, c, to):
+        i = p.find(c)
+        if i == -1:
+            return [p]
+        return reduce(lambda a, b: a + b, [pat_wildexp(p[:i] + t + p[i+1:], c, to) for t in to])
+    def pat_wildcards(pat):
+        return [p for p in pat_wildexp(pat, '?', list('.XO '))
+                  for p in pat_wildexp(p, 'x', list('.O '))
+                  for p in pat_wildexp(p, 'o', list('.X '))]
+    return [p for p in [pat, pat_rot90(pat)]
+              for p in [p, pat_vertflip(p)]
+              for p in [p, pat_horizflip(p)]
+              for p in [p, pat_swapcolors(p)]
+              for p in pat_wildcards(''.join(p))]
+
+pat3set = set([p.replace('O', 'x') for p in patternsrc for p in pat_expand(p)])
 
 def neighborhood(board, c):
     return board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]
@@ -353,7 +365,7 @@ def gen_playout_moves(pos):
 
     # Try to apply a 3x3 pattern on the local neighborhood
     for c in local_moves:
-        if patternre.match(neighborhood(pos.board, c)):
+        if neighborhood(pos.board, c) in pat3set:
             yield (c, 'pat3')
 
     # Try *all* available moves, but starting from a random point

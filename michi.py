@@ -565,16 +565,17 @@ def tree_search(tree, n, disp=False):
     pool = Pool(processes=n_workers)
     ongoing = []
     for i in range(n):
-        # Descend the tree
-        amaf_map = W*W*[0]
-        nodes = tree_descend(tree, amaf_map, disp=disp)
-
-        # Issue a mcplayout job to the worker pool
-        ongoing.append((pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
-
-        # Too many playouts running? Wait a bit...
         if len(ongoing) >= n_workers:
-            ongoing[0][0].wait()
+            # Too many playouts running? Wait a bit...
+            ongoing[0][0].wait(0.01)
+        else:
+            # Descend the tree
+            amaf_map = W*W*[0]
+            nodes = tree_descend(tree, amaf_map, disp=disp)
+
+            # Issue a mcplayout job to the worker pool
+            ongoing.append((pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
+
         # Any playouts are finished yet?
         for job, nodes in ongoing:
             if not job.ready():

@@ -193,7 +193,7 @@ def is_eye(board, c):
     return eyecolor
 
 
-class Position(namedtuple('Position', 'board cap n ko last last2')):
+class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     """ Implementation of simple Chinese Go rules;
     n is how many moves were played so far """
 
@@ -204,7 +204,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2')):
         else:  # to-play is white
             board = self.board.replace('X', 'O').replace('x', 'X')
             Ocap, Xcap = self.cap
-        print('Move: %-3d   Black: %d caps   White: %d caps' % (self.n, Xcap, Ocap))
+        print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi))
         pretty_board = ' '.join(board.rstrip())
         if self.last is not None:
             pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
@@ -251,11 +251,13 @@ class Position(namedtuple('Position', 'board cap n ko last last2')):
             return None
 
         # Update the position and return
-        return Position(board=board.swapcase(), cap=(self.cap[1], capX), n=self.n + 1, ko=ko, last=c, last2=self.last)
+        return Position(board=board.swapcase(), cap=(self.cap[1], capX),
+                n=self.n + 1, ko=ko, last=c, last2=self.last, komi=self.komi)
 
     def pass_move(self):
         """ pass - i.e. return a flipped position """
-        return Position(board=self.board.swapcase(), cap=(self.cap[1], self.cap[0]), n=self.n + 1, ko=None, last=None, last2=self.last)
+        return Position(board=self.board.swapcase(), cap=(self.cap[1], self.cap[0]),
+                n=self.n + 1, ko=None, last=None, last2=self.last, komi=self.komi)
 
     def moves(self, i0):
         """ Generate a list of moves (includes false positives - suicide moves;
@@ -304,12 +306,13 @@ class Position(namedtuple('Position', 'board cap n ko last last2')):
                 board = fboard.replace('#', 'x')
             else:
                 board = fboard.replace('#', ':')  # seki, rare
-        return board.count('X') - board.count('x')
+        komi = self.komi if self.n % 2 == 1 else -self.komi
+        return board.count('X') - board.count('x') + komi
 
 
 def empty_position():
     """ Return an initial board position """
-    return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None)
+    return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None, komi=7.5)
 
 
 # pattern routines

@@ -247,7 +247,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2')):
         """ Generate a list of moves (includes false positives - suicide moves;
         does not include true-eye-filling moves), starting from a given board
         index (that can be used for randomization)"""
-        i = i0
+        i = i0-1
         passes = 0
         while True:
             i = self.board.find('.', i+1)
@@ -340,8 +340,8 @@ def gen_playout_moves(pos):
 
     # Try *all* available moves, but starting from a random point
     # (in other words, play a random move)
-    x, y = random.randint(0, N), random.randint(0, N)
-    for c in pos.moves(W+1 + y*W + x):
+    x, y = random.randint(1, N), random.randint(1, N)
+    for c in pos.moves(y*W + x):
         yield c
 
 

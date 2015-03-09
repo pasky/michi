@@ -469,17 +469,21 @@ def tree_search(tree, n, disp=False):
         passes = 0
         while nodes[-1].children is not None and passes < 2:
             if disp:  nodes[-1].pos.print_board()
+
             # Pick the most urgent child
             urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
             if disp:
-                print(', '.join(['%s:%d/%d:%.3f' % (str_coord(nodes[-1].children[ci].pos.last), nodes[-1].children[ci].w, nodes[-1].children[ci].v, u)
-                                 for ci, u in enumerate(urgencies)]))
+                nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in enumerate(urgencies)]
+                print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
+                                 for node, u in nodes_urgencies(nodes[-1], urgencies)]))
             ci, u = max(enumerate(urgencies), key=itemgetter(1))
+
             nodes.append(nodes[-1].children[ci])
             if nodes[-1].pos.last is None:
                 passes += 1
             else:
                 passes = 0
+
             nodes[-1].v += 1
             if nodes[-1].children is None and nodes[-1].v >= EXPAND_VISITS:
                 nodes[-1].expand()
@@ -560,4 +564,4 @@ if __name__ == "__main__":
     game_io()
     # print(mcplayout(empty_position(), disp=True))
     # print(mcbenchmark(20))
-    # tree_search(TreeNode(pos=empty_position()), 1000).pos.print_board()
+    # tree_search(TreeNode(pos=empty_position()), 1000, disp=False).pos.print_board()

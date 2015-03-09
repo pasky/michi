@@ -31,6 +31,7 @@ PRIOR_EVEN = 3
 PRIOR_CAPTURE = 5
 PRIOR_PAT3 = 5
 REPORT_PERIOD = 20
+RESIGN_THRES = 0.2
 
 patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
        ["XOX",  # hane pattern - enclosing hane
@@ -453,11 +454,11 @@ def str_tree_summary(tree, sims):
              ))
 
 
-def tree_search(pos, n, disp=False):
+def tree_search(tree, n, disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
     # Initialize root node
-    tree = TreeNode(pos=pos)
-    tree.expand()
+    if tree.children is None:
+        tree.expand()
 
     for i in range(n):
         # Descend to the leaf
@@ -495,7 +496,7 @@ def tree_search(pos, n, disp=False):
             print(str_tree_summary(tree, i))
 
     print(str_tree_summary(tree, n))
-    return tree.best_move().pos
+    return tree.best_move()
 
 
 def parse_coord(s):
@@ -515,23 +516,46 @@ def game_io():
     """ A simple UI for playing on the board, no move generation involved;
     intended for testing. """
 
-    pos = empty_position()
+    tree = TreeNode(pos=empty_position())
+    tree.expand()
     while True:
-        pos.print_board()
+        tree.pos.print_board()
+
         sc = raw_input("Your move: ")
         c = parse_coord(sc)
-        if pos.board[c] != '.':
-            print('Bad move (not empty point)')
-            continue
-        pos2 = pos.move(c)
-        if pos2 is None:
-            print('Bad move (rule violation)')
-            continue
-        pos = pos2
+        if c is not None:
+            # Not a pass
+            if tree.pos.board[c] != '.':
+                print('Bad move (not empty point)')
+                continue
+
+            # Find the next node in the game tree and proceed there
+            nodes = filter(lambda n: n.pos.last == c, tree.children)
+            if not nodes:
+                print('Bad move (rule violation)')
+                continue
+            tree = nodes[0]
+
+        else:
+            # Pass move
+            if tree.children[0].pos.last is None:
+                tree = tree.children[0]
+            else:
+                tree = TreeNode(pos=tree.pos.pass_move())
+
+        tree.pos.print_board()
+        tree = tree_search(tree, 500)
+        if tree.pos.last is None and tree.pos.last2 is None:
+            print('Game over, score: B%d' % (tree.pos.score(),))
+            break
+        if float(tree.w)/tree.v < RESIGN_THRES:
+            print('I resign.')
+            break
+    print('Thank you for the game!')
 
 
 if __name__ == "__main__":
-    # game_io()
+    game_io()
     # print(mcplayout(empty_position(), disp=True))
     # print(mcbenchmark(20))
-    tree_search(empty_position(), 1000).print_board()
+    # tree_search(TreeNode(pos=empty_position()), 1000).pos.print_board()

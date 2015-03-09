@@ -9,6 +9,7 @@
 
 # FIXME: No superko support.  This is a big bug, of course.
 
+from __future__ import print_function
 from collections import namedtuple
 from itertools import count
 import math
@@ -614,11 +615,14 @@ def game_io():
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "mcdebug":
+    if len(sys.argv) < 2:
+        # Default action
+        game_io()
+    elif sys.argv[1] == "mcdebug":
         print(mcplayout(empty_position(), W*W*[0], disp=True))
     elif sys.argv[1] == "mcbenchmark":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
         tree_search(TreeNode(pos=empty_position()), 400, disp=False).pos.print_board()
     else:
-        game_io()
+        print('Unknown action', file=sys.stderr)

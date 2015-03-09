@@ -9,6 +9,8 @@
 
 from collections import namedtuple
 from itertools import count
+import math
+from operator import itemgetter
 import random
 import re
 
@@ -22,6 +24,13 @@ W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
+
+UCB1_C = 0.1
+EXPAND_VISITS = 2
+PRIOR_EVEN = 3
+PRIOR_CAPTURE = 5
+PRIOR_PAT3 = 5
+REPORT_PERIOD = 20
 
 patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
        ["XOX",  # hane pattern - enclosing hane
@@ -74,6 +83,7 @@ patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
 def neighbors(c):
     """ generator of coordinates for all neighbors of c """
     return [c-1, c+1, c-W, c+W]
+
 def diag_neighbors(c):
     """ generator of coordinates for all diagonal neighbors of c """
     return [c-W-1, c-W+1, c+W-1, c+W+1]
@@ -190,7 +200,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2')):
         else:  # to-play is white
             board = self.board.replace('X', 'O').replace('x', 'X')
             Ocap, Xcap = self.cap
-        print('Move: % 3d   Black: %d caps   White: %d caps' % (self.n, Xcap, Ocap))
+        print('Move: %-3d   Black: %d caps   White: %d caps' % (self.n, Xcap, Ocap))
         pretty_board = ' '.join(board.rstrip())
         if self.last is not None:
             pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
@@ -323,7 +333,7 @@ def neighborhood(board, c):
 
 def gen_playout_moves(pos):
     """ Yield candidate next moves in the order of preference; this is one
-    of the main places where heuristics dwell """
+    of the main places where heuristics dwell, try adding more! """
     local_moves = pos.last_moves_neighbors()
 
     # Check whether any local group is in atari and fill that liberty
@@ -331,18 +341,18 @@ def gen_playout_moves(pos):
         if pos.board[c] in 'Xx':
             d = in_atari(pos.board, c)
             if d is not None:
-                yield d
+                yield (d, 'capture')
 
     # Try to apply a 3x3 pattern on the local neighborhood
     for c in local_moves:
         if patternre.match(neighborhood(pos.board, c)):
-            yield c
+            yield (c, 'pat3')
 
     # Try *all* available moves, but starting from a random point
     # (in other words, play a random move)
     x, y = random.randint(1, N), random.randint(1, N)
     for c in pos.moves(y*W + x):
-        yield c
+        yield (c, 'random')
 
 
 def mcplayout(pos, disp=False):
@@ -354,7 +364,7 @@ def mcplayout(pos, disp=False):
         if disp:  pos.print_board()
 
         pos2 = None
-        for c in gen_playout_moves(pos):
+        for c, kind in gen_playout_moves(pos):
             pos2 = pos.move(c)
             if pos2 is not None:
                 break
@@ -370,7 +380,6 @@ def mcplayout(pos, disp=False):
     else:
         return -score
 
-
 def mcbenchmark(n):
     """ run n Monte-Carlo playouts from empty position, return avg. score """
     sumscore = 0
@@ -379,11 +388,125 @@ def mcbenchmark(n):
     return float(sumscore) / n
 
 
+# Monte Carlo tree, grown asymmetrically
+
+class TreeNode():
+    """ Monte-Carlo tree node;
+    v is #visits, w is #wins for to-play (expected reward is w/v)
+    pv, pw are prior values (node value = w/v + pw/pv)
+    children is None for leaf nodes """
+    def __init__(self, pos):
+        self.pos = pos
+        self.v = 0
+        self.w = 0
+        self.pv = PRIOR_EVEN
+        self.pw = PRIOR_EVEN
+        self.children = None
+
+    def expand(self):
+        """ add and initialize children to a leaf node """
+        self.children = []
+        for c, kind in gen_playout_moves(self.pos):
+            pos2 = self.pos.move(c)
+            if pos2 is None:
+                continue
+            node = TreeNode(pos2)
+            self.children.append(node)
+
+            # Add some priors to bias search towards more sensible moves
+            # Note that there are many other ways to incorporate the priors
+            if kind == 'capture':
+                node.pv += PRIOR_CAPTURE
+                node.pw += PRIOR_CAPTURE
+            elif kind == 'pat3':
+                node.pv += PRIOR_PAT3
+                node.pw += PRIOR_PAT3
+
+        if not self.children:
+            # No possible moves, add a pass move
+            self.children.append(TreeNode(self.pos.pass_move()))
+
+    def ucb1_urgency(self, n0):
+        return float(self.w+self.pw)/(self.v+self.pv) + UCB1_C * math.sqrt(2*math.log(n0) / (self.v+1))
+
+    def child_values(self):
+        return [float(node.w+1)/(node.v+1) for node in self.children]
+
+    def best_move(self):
+        """ best move is the most simulated one """
+        return self.children[max(enumerate([node.v for node in self.children]), key=itemgetter(1))[0]]
+
+
+def str_tree_summary(tree, sims):
+    best_nodes = [tree.children[i] for i, u in sorted(enumerate(tree.child_values()), key=itemgetter(1), reverse=True)[:5]]
+    best_seq = []
+    node = tree
+    while node is not None:
+        best_seq.append(node.pos.last)
+        if node.children is None:
+            break
+        node = node.best_move()
+    return ('[%4d] winrate %.3f | best %s | seq %s' %
+            (sims, 1.0-float(tree.w)/tree.v,
+             ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), float(n.w+1)/(n.v+1)) for n in best_nodes]),
+             ' '.join([str_coord(c) for c in best_seq[1:5]]),
+             ))
+
+
+def tree_search(pos, n, disp=False):
+    """ Perform MCTS search from a given position for a given #iterations """
+    # Initialize root node
+    tree = TreeNode(pos=pos)
+    tree.expand()
+
+    for i in range(n):
+        # Descend to the leaf
+        tree.v += 1
+        nodes = [tree]
+        passes = 0
+        while nodes[-1].children is not None and passes < 2:
+            if disp:  nodes[-1].pos.print_board()
+            # Pick the most urgent child
+            urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
+            if disp:
+                print(', '.join(['%s:%d/%d:%.3f' % (str_coord(nodes[-1].children[ci].pos.last), nodes[-1].children[ci].w, nodes[-1].children[ci].v, u)
+                                 for ci, u in enumerate(urgencies)]))
+            ci, u = max(enumerate(urgencies), key=itemgetter(1))
+            nodes.append(nodes[-1].children[ci])
+            if nodes[-1].pos.last is None:
+                passes += 1
+            else:
+                passes = 0
+            nodes[-1].v += 1
+            if nodes[-1].children is None and nodes[-1].v >= EXPAND_VISITS:
+                nodes[-1].expand()
+
+        # Run a simulation
+        if disp:  print('** SIMULATION **')
+        score = mcplayout(nodes[-1].pos, disp=disp)
+
+        # Back-propagate the result
+        for node in reversed(nodes):
+            if disp:  print('updating', str_coord(node.pos.last), score < 0)
+            node.w += score < 0  # score is for to-play, node statistics for just-played
+            score = -score
+
+        if i > 0 and i % REPORT_PERIOD == 0:
+            print(str_tree_summary(tree, i))
+
+    print(str_tree_summary(tree, n))
+    return tree.best_move().pos
+
+
 def parse_coord(s):
+    if s == 'pass':
+        return None
     return W+1 + (N - int(s[1])) * W + colstr.index(s[0])
 
 
 def str_coord(c):
+    if c is None:
+        return 'pass'
     row, col = divmod(c - (W+1), W)
     return '%c%d' % (colstr[col], N - row)
 
@@ -410,4 +533,5 @@ def game_io():
 if __name__ == "__main__":
     # game_io()
     # print(mcplayout(empty_position(), disp=True))
-    print(mcbenchmark(20))
+    # print(mcbenchmark(20))
+    tree_search(empty_position(), 1000).print_board()

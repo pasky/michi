@@ -7,6 +7,8 @@
 ## This file is not executable - it needs to be used through a user interface
 ## frontend like gtpmichi.py or textmichi.py.
 
+# FIXME: No superko support.  This is a big bug, of course.
+
 from collections import namedtuple
 from itertools import count
 import math

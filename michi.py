@@ -15,6 +15,7 @@ import math
 from operator import itemgetter
 import random
 import re
+import sys
 
 
 # Given a board of size NxN (N=9, 19, ...), we represent the position
@@ -601,7 +602,11 @@ def game_io():
 
 
 if __name__ == "__main__":
-    game_io()
-    # print(mcplayout(empty_position(), W*W*[0], disp=True))
-    # print(mcbenchmark(20))
-    # tree_search(TreeNode(pos=empty_position()), 1000, disp=False).pos.print_board()
+    if sys.argv[1] == "mcdebug":
+        print(mcplayout(empty_position(), W*W*[0], disp=True))
+    elif sys.argv[1] == "mcbenchmark":
+        print(mcbenchmark(20))
+    elif sys.argv[1] == "tsbenchmark":
+        tree_search(TreeNode(pos=empty_position()), 400, disp=False).pos.print_board()
+    else:
+        game_io()

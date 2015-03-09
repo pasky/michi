@@ -493,6 +493,58 @@ def str_tree_summary(tree, sims):
              ))
 
 
+def tree_descend(tree, amaf_map, disp=False):
+    """ Descend through the tree to a leaf """
+    tree.v += 1
+    nodes = [tree]
+    passes = 0
+    while nodes[-1].children is not None and passes < 2:
+        if disp:  nodes[-1].pos.print_board()
+
+        # Pick the most urgent child
+        # urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
+        urgencies = [node.rave_urgency() for node in nodes[-1].children]
+        if disp:
+            nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in enumerate(urgencies)]
+            print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
+                             for node, u in nodes_urgencies(nodes[-1], urgencies)]), file=sys.stderr)
+        ci, u = max(enumerate(urgencies), key=itemgetter(1))
+
+        nodes.append(nodes[-1].children[ci])
+
+        c = nodes[-1].pos.last
+        if c is None:
+            passes += 1
+        else:
+            passes = 0
+            if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
+                amaf_map[c] = 1 if nodes[-2].pos.n % 2 == 0 else -1
+
+        nodes[-1].v += 1  # updating visits on the way down represents "virtual loss", relevant for parallelization
+        if nodes[-1].children is None and nodes[-1].v >= EXPAND_VISITS:
+            nodes[-1].expand()
+
+    return nodes
+
+
+def tree_update(nodes, amaf_map, score, disp=False):
+    """ Store simulation result in the tree (@nodes is the tree path) """
+    for node in reversed(nodes):
+        if disp:  print('updating', str_coord(node.pos.last), score < 0, file=sys.stderr)
+        node.w += score < 0  # score is for to-play, node statistics for just-played
+        # Update the node children AMAF stats with moves we made
+        # with their color
+        amaf_map_value = 1 if node.pos.n % 2 == 0 else -1
+        if node.children is not None:
+            for child in node.children:
+                if child.pos.last is None:
+                    continue
+                if amaf_map[child.pos.last] == amaf_map_value:
+                    child.aw += score > 0  # reversed perspective
+                    child.av += 1
+        score = -score
+
+
 def tree_search(tree, n, disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
     # Initialize root node
@@ -502,55 +554,12 @@ def tree_search(tree, n, disp=False):
     for i in range(n):
         amaf_map = W*W*[0]
 
-        # Descend to the leaf
-        tree.v += 1
-        nodes = [tree]
-        passes = 0
-        while nodes[-1].children is not None and passes < 2:
-            if disp:  nodes[-1].pos.print_board()
+        nodes = tree_descend(tree, amaf_map, disp=disp)
 
-            # Pick the most urgent child
-            # urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
-            urgencies = [node.rave_urgency() for node in nodes[-1].children]
-            if disp:
-                nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in enumerate(urgencies)]
-                print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
-                                 for node, u in nodes_urgencies(nodes[-1], urgencies)]), file=sys.stderr)
-            ci, u = max(enumerate(urgencies), key=itemgetter(1))
-
-            nodes.append(nodes[-1].children[ci])
-
-            c = nodes[-1].pos.last
-            if c is None:
-                passes += 1
-            else:
-                passes = 0
-                if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
-                    amaf_map[c] = 1 if nodes[-2].pos.n % 2 == 0 else -1
-
-            nodes[-1].v += 1  # updating visits on the way down represents "virtual loss", relevant for parallelization
-            if nodes[-1].children is None and nodes[-1].v >= EXPAND_VISITS:
-                nodes[-1].expand()
-
-        # Run a simulation
         if disp:  print('** SIMULATION **', file=sys.stderr)
         score = mcplayout(nodes[-1].pos, amaf_map, disp=disp)
 
-        # Back-propagate the result
-        for node in reversed(nodes):
-            if disp:  print('updating', str_coord(node.pos.last), score < 0, file=sys.stderr)
-            node.w += score < 0  # score is for to-play, node statistics for just-played
-            # Update the node children AMAF stats with moves we made
-            # with their color
-            amaf_map_value = 1 if node.pos.n % 2 == 0 else -1
-            if node.children is not None:
-                for child in node.children:
-                    if child.pos.last is None:
-                        continue
-                    if amaf_map[child.pos.last] == amaf_map_value:
-                        child.aw += score > 0  # reversed perspective
-                        child.av += 1
-            score = -score
+        tree_update(nodes, amaf_map, score, disp=disp)
 
         if i > 0 and i % REPORT_PERIOD == 0:
             print(str_tree_summary(tree, i), file=sys.stderr)

@@ -13,6 +13,8 @@ from __future__ import print_function
 from collections import namedtuple
 from itertools import count
 import math
+import multiprocessing
+from multiprocessing.pool import Pool
 from operator import itemgetter
 import random
 import re
@@ -381,6 +383,7 @@ def mcplayout(pos, amaf_map, disp=False):
     return score for to-play player at the starting position;
     amaf_map is board-sized scratchpad recording who played at a given
     position first """
+    if disp:  print('** SIMULATION **', file=sys.stderr)
     start_n = pos.n
     passes = 0
     while passes < 2 and pos.n < MAX_GAME_LEN:
@@ -401,15 +404,15 @@ def mcplayout(pos, amaf_map, disp=False):
         pos = pos2
     score = pos.score()
     if start_n % 2 == pos.n % 2:
-        return score
+        return score, amaf_map
     else:
-        return -score
+        return -score, amaf_map
 
 def mcbenchmark(n):
     """ run n Monte-Carlo playouts from empty position, return avg. score """
     sumscore = 0
     for i in range(0, n):
-        sumscore += mcplayout(empty_position(), W*W*[0])
+        sumscore += mcplayout(empty_position(), W*W*[0])[0]
     return float(sumscore) / n
 
 
@@ -551,15 +554,34 @@ def tree_search(tree, n, disp=False):
     if tree.children is None:
         tree.expand()
 
-    for i in range(n):
-        amaf_map = W*W*[0]
+    # We could simply run tree_descend(), mcplayout(), tree_update()
+    # sequentially in a loop.  However, we have an easy (though not optimal)
+    # way to parallelize by distributing the mcplayout() calls to other
+    # processes using the multiprocessing module.  mcplayout() consumes
+    # maybe more than 90% CPU, especially on larger boards.
 
+    n_workers = multiprocessing.cpu_count()  # set to 1 when debugging
+    pool = Pool(processes=n_workers)
+    ongoing = []
+    for i in range(n):
+        # Descend the tree
+        amaf_map = W*W*[0]
         nodes = tree_descend(tree, amaf_map, disp=disp)
 
-        if disp:  print('** SIMULATION **', file=sys.stderr)
-        score = mcplayout(nodes[-1].pos, amaf_map, disp=disp)
+        # Issue a mcplayout job to the worker pool
+        ongoing.append((pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
 
-        tree_update(nodes, amaf_map, score, disp=disp)
+        # Too many playouts running? Wait a bit...
+        if len(ongoing) >= n_workers:
+            ongoing[0][0].wait()
+        # Any playouts are finished yet?
+        for job, nodes in ongoing:
+            if not job.ready():
+                continue
+            # Yes! Store it in the tree.
+            score, amaf_map = job.get()
+            tree_update(nodes, amaf_map, score, disp=disp)
+            ongoing.remove((job, nodes))
 
         if i > 0 and i % REPORT_PERIOD == 0:
             print(str_tree_summary(tree, i), file=sys.stderr)
@@ -628,10 +650,10 @@ if __name__ == "__main__":
         # Default action
         game_io()
     elif sys.argv[1] == "mcdebug":
-        print(mcplayout(empty_position(), W*W*[0], disp=True))
+        print(mcplayout(empty_position(), W*W*[0], disp=True)[0])
     elif sys.argv[1] == "mcbenchmark":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
-        tree_search(TreeNode(pos=empty_position()), 400, disp=False).pos.print_board()
+        tree_search(TreeNode(pos=empty_position()), 1000, disp=False).pos.print_board()
     else:
         print('Unknown action', file=sys.stderr)

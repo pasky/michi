@@ -105,7 +105,6 @@ def floodfill(board, c):
     p = board[c]
     board = board_put(board, c, '#')
     fringe = [c]
-    # XXX: Store entry neighbor so we don't revisit it
     # XXX: Shoot beams to speed things up
     while fringe:
         c = fringe.pop()
@@ -116,6 +115,7 @@ def floodfill(board, c):
     return board
 
 
+# Regex that matches various kind of points adjecent to '#' (floodfilled) points
 contact_res = dict()
 for p in ['.', 'x', 'X']:
     rp = '\\.' if p == '.' else p

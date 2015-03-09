@@ -22,7 +22,9 @@ regarding the playout policy mechanics and the way tree node priors
 are constructed and incorporated (this is not about individual heuristics
 but the way they are integrated).  Michi uses the MCTS flavor used in
 Pachi and Fuego, but e.g. Zen and CrazyStone take quite a different
-approach to this.
+approach to this.  For a general introduction to Michi-style MCTS algorithm,
+see Petr Baudis' Master Thesis http://pasky.or.cz/go/prace.pdf, esp.
+Sec. 2.1 to 2.3 and Sec. 3.3 to 3.4.
 
 The ethymology of Michi is "Minimalistic Pachi".  If you would like
 to try your hands at hacking a competitive Computer Go engine, try Pachi! :-)

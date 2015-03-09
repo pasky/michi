@@ -199,22 +199,22 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     """ Implementation of simple Chinese Go rules;
     n is how many moves were played so far """
 
-    def print_board(self):
+    def print_board(self, f=sys.stderr):
         if self.n % 2 == 0:  # to-play is black
             board = self.board.replace('x', 'O')
             Xcap, Ocap = self.cap
         else:  # to-play is white
             board = self.board.replace('X', 'O').replace('x', 'X')
             Ocap, Xcap = self.cap
-        print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi))
+        print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi), file=f)
         pretty_board = ' '.join(board.rstrip())
         if self.last is not None:
             pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
         rowcounter = count()
         pretty_board = "\n".join([' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)])
-        print(pretty_board)
-        print('    ' + ' '.join(colstr[:N]))
-        print('')
+        print(pretty_board, file=f)
+        print('    ' + ' '.join(colstr[:N]), file=f)
+        print('', file=f)
 
     def move(self, c):
         """ play as player X at the given coord c, return the new position """
@@ -515,7 +515,7 @@ def tree_search(tree, n, disp=False):
             if disp:
                 nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in enumerate(urgencies)]
                 print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
-                                 for node, u in nodes_urgencies(nodes[-1], urgencies)]))
+                                 for node, u in nodes_urgencies(nodes[-1], urgencies)]), file=sys.stderr)
             ci, u = max(enumerate(urgencies), key=itemgetter(1))
 
             nodes.append(nodes[-1].children[ci])
@@ -533,12 +533,12 @@ def tree_search(tree, n, disp=False):
                 nodes[-1].expand()
 
         # Run a simulation
-        if disp:  print('** SIMULATION **')
+        if disp:  print('** SIMULATION **', file=sys.stderr)
         score = mcplayout(nodes[-1].pos, amaf_map, disp=disp)
 
         # Back-propagate the result
         for node in reversed(nodes):
-            if disp:  print('updating', str_coord(node.pos.last), score < 0)
+            if disp:  print('updating', str_coord(node.pos.last), score < 0, file=sys.stderr)
             node.w += score < 0  # score is for to-play, node statistics for just-played
             # Update the node children AMAF stats with moves we made
             # with their color
@@ -553,9 +553,9 @@ def tree_search(tree, n, disp=False):
             score = -score
 
         if i > 0 and i % REPORT_PERIOD == 0:
-            print(str_tree_summary(tree, i))
+            print(str_tree_summary(tree, i), file=sys.stderr)
 
-    print(str_tree_summary(tree, n))
+    print(str_tree_summary(tree, n), file=sys.stderr)
     return tree.best_move()
 
 
@@ -579,7 +579,7 @@ def game_io():
     tree = TreeNode(pos=empty_position())
     tree.expand()
     while True:
-        tree.pos.print_board()
+        tree.pos.print_board(sys.stdout)
 
         sc = raw_input("Your move: ")
         c = parse_coord(sc)

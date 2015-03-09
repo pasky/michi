@@ -31,6 +31,7 @@ empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
+N_SIMS = 1000
 UCB1_C = 0.1
 RAVE_EQUIV = 1500
 EXPAND_VISITS = 2
@@ -635,7 +636,7 @@ def game_io():
                 tree = TreeNode(pos=tree.pos.pass_move())
 
         tree.pos.print_board()
-        tree = tree_search(tree, 500)
+        tree = tree_search(tree, N_SIMS)
         if tree.pos.last is None and tree.pos.last2 is None:
             print('Game over, score: B%d' % (tree.pos.score(),))
             break
@@ -654,6 +655,6 @@ if __name__ == "__main__":
     elif sys.argv[1] == "mcbenchmark":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
-        tree_search(TreeNode(pos=empty_position()), 1000, disp=False).pos.print_board()
+        tree_search(TreeNode(pos=empty_position()), N_SIMS, disp=False).pos.print_board()
     else:
         print('Unknown action', file=sys.stderr)

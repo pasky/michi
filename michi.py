@@ -474,12 +474,23 @@ class TreeNode():
 
     def winrate(self):
         if self.v == 0:
-            return math.nan
+            return float('nan')
         return float(self.w) / self.v
 
     def best_move(self):
         """ best move is the most simulated one """
         return self.children[max(enumerate([node.v for node in self.children]), key=itemgetter(1))[0]]
+
+    def dump_subtree(self, thres=N_SIMS/50, indent=0, f=sys.stderr):
+        """ print this node and all its children with v >= thres. """
+        print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, urgency %.3f)" %
+              (indent*' ', str_coord(self.pos.last), self.winrate(),
+               self.w, self.v, self.pw, self.pv, self.av, self.aw,
+               float(self.aw)/self.av if self.av > 0 else float('nan'),
+               self.rave_urgency()))
+        for child in sorted(self.children, key=lambda n: n.v, reverse=True):
+            if child.v >= thres:
+                child.dump_subtree(thres=thres, indent=indent+3, f=f)
 
 
 def str_tree_summary(tree, sims):
@@ -593,6 +604,8 @@ def tree_search(tree, n, disp=False):
             tree_update(nodes, amaf_map, score, disp=disp)
             ongoing.remove((job, nodes))
 
+    tree.dump_subtree()
+    print(str_tree_summary(tree, i), file=sys.stderr)
     return tree.best_move()
 
 

@@ -563,7 +563,7 @@ def tree_search(tree, n, disp=False):
     # processes using the multiprocessing module.  mcplayout() consumes
     # maybe more than 90% CPU, especially on larger boards.
 
-    n_workers = multiprocessing.cpu_count()  # set to 1 when debugging
+    n_workers = multiprocessing.cpu_count() if not disp else 1  # set to 1 when debugging
     pool = Pool(processes=n_workers)
     ongoing = []
     i = 0
@@ -660,5 +660,7 @@ if __name__ == "__main__":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
         tree_search(TreeNode(pos=empty_position()), N_SIMS, disp=False).pos.print_board()
+    elif sys.argv[1] == "tsdebug":
+        tree_search(TreeNode(pos=empty_position()), N_SIMS, disp=True).pos.print_board()
     else:
         print('Unknown action', file=sys.stderr)

@@ -439,12 +439,17 @@ class TreeNode():
     def expand(self):
         """ add and initialize children to a leaf node """
         self.children = []
+        childset = dict()
         for c, kind in gen_playout_moves(self.pos):
             pos2 = self.pos.move(c)
             if pos2 is None:
                 continue
-            node = TreeNode(pos2)
-            self.children.append(node)
+            try:
+                node = childset[pos2.last]
+            except KeyError:
+                node = TreeNode(pos2)
+                self.children.append(node)
+                childset[pos2.last] = node
 
             # Add some priors to bias search towards more sensible moves
             # Note that there are many other ways to incorporate the priors

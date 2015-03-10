@@ -132,31 +132,52 @@ for p in ['.', 'x', 'X']:
 def contact(board, p):
     """ test if point of color p is adjecent to color # anywhere
     on the board; use in conjunction with floodfill for reachability """
-    return contact_res[p].search(board)
-
-def libpos(board):
-    """ yield a liberty of #-marked group """
-    m = contact(board, '.')
+    m = contact_res[p].search(board)
     if not m:
         return None
-    if m.group(0)[0] == '.':
-        c = m.start()
+    if m.group(0)[0] == p:
+        return m.start()
     else:
-        c = m.end() - 1
-    return c
+        return m.end() - 1
 
 
-def in_atari(board, c):
-    """ return None if not in atari, the liberty coordinate otherwise """
+def fix_atari(board, c):
+    """ return None if not in atari or unable to escape atari,
+    the saving liberty coordinate otherwise """
     fboard = floodfill(board, c)
-    l = libpos(fboard)
-    if l is None:
-        return None
+    # Find a liberty
+    l = contact(fboard, '.')
     # Ok, any other liberty?
     fboard = board_put(fboard, l, 'L')
-    if libpos(fboard) is not None:
+    if contact(fboard, '.') is not None:
         return None
-    return l
+    # In atari! If it's the opponent's group, that's enough...
+    if board[c] == 'x':
+        return l
+
+    # We are escaping.  Will playing this liberty gain
+    # at least two liberties?  Re-floodfill to account for connecting
+    fboard = floodfill(board_put(board, l, 'X'), l)
+    l_new = contact(fboard, '.')
+    if l_new is None:
+        return None  # oops, suicidal move
+    fboard = board_put(fboard, l_new, 'L')
+    # print(str_coord(l_new), fboard, file=sys.stderr)
+    if contact(fboard, '.') is not None:
+        return l  # good, there is still some liberty remaining
+
+    # Playing this liberty won't work, what about counter-capturing
+    # a neighboring group?
+    while True:
+        othergroup = contact(fboard, 'x')
+        if othergroup is None:
+            break
+        l = fix_atari(board, othergroup)
+        if l is not None:
+            return l
+        # XXX: floodfill is better for big groups
+        fboard = board_put(fboard, othergroup, '%')
+    return None
 
 
 def is_eyeish(board, c):
@@ -239,7 +260,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             # at things - to do it properly, we should maintain some per-group
             # data structures tracking liberties.
             fboard = floodfill(board, d)  # board with the adjecent group replaced by '#'
-            if contact(fboard, '.'):
+            if contact(fboard, '.') is not None:
                 continue  # some liberties left
             capcount = fboard.count('#')
             if capcount == 1:
@@ -252,7 +273,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
         else:
             ko = None
         # Test for suicide
-        if not contact(floodfill(board, c), '.'):
+        if contact(floodfill(board, c), '.') is None:
             return None
 
         # Update the position and return
@@ -305,8 +326,8 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             if i == -1:
                 break
             fboard = floodfill(board, i)
-            touches_X = contact(fboard, 'X')
-            touches_x = contact(fboard, 'x')
+            touches_X = contact(fboard, 'X') is not None
+            touches_x = contact(fboard, 'x') is not None
             if touches_X and not touches_x:
                 board = fboard.replace('#', 'X')
             elif touches_x and not touches_X:
@@ -363,9 +384,10 @@ def gen_playout_moves(pos):
     local_moves = pos.last_moves_neighbors()
 
     # Check whether any local group is in atari and fill that liberty
+    # print('local moves', [str_coord(c) for c in local_moves], file=sys.stderr)
     for c in local_moves:
         if pos.board[c] in 'Xx':
-            d = in_atari(pos.board, c)
+            d = fix_atari(pos.board, c)
             if d is not None:
                 yield (d, 'capture')
 

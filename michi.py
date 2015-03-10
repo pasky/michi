@@ -394,6 +394,8 @@ def mcplayout(pos, amaf_map, disp=False):
 
         pos2 = None
         for c, kind in gen_playout_moves(pos):
+            if disp and kind != 'random':
+                print('move suggestion', str_coord(c), kind, file=sys.stderr)
             pos2 = pos.move(c)
             if pos2 is not None:
                 if amaf_map[c] == 0:  # Mark the coordinate with 1 for black

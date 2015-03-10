@@ -371,7 +371,7 @@ def gen_playout_moves(pos):
 
     # Try to apply a 3x3 pattern on the local neighborhood
     for c in local_moves:
-        if neighborhood(pos.board, c) in pat3set:
+        if pos.board[c] == '.' and neighborhood(pos.board, c) in pat3set:
             yield (c, 'pat3')
 
     # Try *all* available moves, but starting from a random point

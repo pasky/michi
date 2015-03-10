@@ -474,7 +474,7 @@ class TreeNode():
 
     def winrate(self):
         if self.v == 0:
-            return 0  # what else?
+            return math.nan
         return float(self.w) / self.v
 
     def best_move(self):
@@ -492,7 +492,7 @@ def str_tree_summary(tree, sims):
             break
         node = node.best_move()
     return ('[%4d] winrate %.3f | seq %s | can %s' %
-            (sims, 1.0 - tree.winrate(),
+            (sims, best_nodes[0].winrate(),
              ' '.join([str_coord(c) for c in best_seq[1:6]]),
              ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes]),
              ))

@@ -564,11 +564,16 @@ def tree_search(tree, n, disp=False):
     n_workers = multiprocessing.cpu_count()  # set to 1 when debugging
     pool = Pool(processes=n_workers)
     ongoing = []
-    for i in range(n):
+    i = 0
+    while i < n:
         if len(ongoing) >= n_workers:
             # Too many playouts running? Wait a bit...
             ongoing[0][0].wait(0.01)
         else:
+            i += 1
+            if i > 0 and i % REPORT_PERIOD == 0:
+                print(str_tree_summary(tree, i), file=sys.stderr)
+
             # Descend the tree
             amaf_map = W*W*[0]
             nodes = tree_descend(tree, amaf_map, disp=disp)
@@ -585,10 +590,6 @@ def tree_search(tree, n, disp=False):
             tree_update(nodes, amaf_map, score, disp=disp)
             ongoing.remove((job, nodes))
 
-        if i > 0 and i % REPORT_PERIOD == 0:
-            print(str_tree_summary(tree, i), file=sys.stderr)
-
-    print(str_tree_summary(tree, n), file=sys.stderr)
     return tree.best_move()
 
 

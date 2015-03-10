@@ -284,14 +284,16 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             yield i
 
     def last_moves_neighbors(self):
-        """ generate a randomly shuffled list of moves surrounding the last
-        two moves (but with the last move having priority) """
-        dlist = []
+        """ generate a randomly shuffled list of points including and
+        surrounding the last two moves (but with the last move having
+        priority)"""
+        clist = []
         for c in self.last, self.last2:
             if c is None:  continue
-            dlist += list(neighbors(c) + diag_neighbors(c))
-        random.shuffle(dlist)
-        return dlist
+            dlist = [c] + list(neighbors(c) + diag_neighbors(c))
+            random.shuffle(dlist)
+            clist += dlist
+        return clist
 
     def score(self):
         """ compute score for to-play player; this assumes a final position

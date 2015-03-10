@@ -563,6 +563,8 @@ def tree_update(nodes, amaf_map, score, disp=False):
         score = -score
 
 
+pool = None
+
 def tree_search(tree, n, disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
     # Initialize root node
@@ -576,7 +578,9 @@ def tree_search(tree, n, disp=False):
     # maybe more than 90% CPU, especially on larger boards.
 
     n_workers = multiprocessing.cpu_count() if not disp else 1  # set to 1 when debugging
-    pool = Pool(processes=n_workers)
+    global pool
+    if pool is None:
+        pool = Pool(processes=n_workers)
     ongoing = []
     i = 0
     while i < n:

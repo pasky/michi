@@ -507,13 +507,14 @@ def tree_descend(tree, amaf_map, disp=False):
         if disp:  nodes[-1].pos.print_board()
 
         # Pick the most urgent child
-        # urgencies = [node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]
-        urgencies = [node.rave_urgency() for node in nodes[-1].children]
+        # urgencies = list(enumerate([node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]))
+        urgencies = list(enumerate([node.rave_urgency() for node in nodes[-1].children]))
         if disp:
-            nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in enumerate(urgencies)]
+            nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in urgencies]
             print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
                              for node, u in nodes_urgencies(nodes[-1], urgencies)]), file=sys.stderr)
-        ci, u = max(enumerate(urgencies), key=itemgetter(1))
+        random.shuffle(urgencies)  # randomize the max in case of equal urgency
+        ci, u = max(urgencies, key=itemgetter(1))
 
         nodes.append(nodes[-1].children[ci])
 

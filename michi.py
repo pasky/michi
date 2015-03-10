@@ -404,6 +404,7 @@ def mcplayout(pos, amaf_map, disp=False):
         passes = 0
         pos = pos2
     score = pos.score()
+    if disp:  print('** SCORE B%+.1f **' % (score if pos.n % 2 == 0 else -score), file=sys.stderr)
     if start_n % 2 == pos.n % 2:
         return score, amaf_map
     else:
@@ -544,6 +545,7 @@ def tree_update(nodes, amaf_map, score, disp=False):
                 if child.pos.last is None:
                     continue
                 if amaf_map[child.pos.last] == amaf_map_value:
+                    if disp:  print('  AMAF updating', str_coord(child.pos.last), score > 0, file=sys.stderr)
                     child.aw += score > 0  # reversed perspective
                     child.av += 1
         score = -score
@@ -640,7 +642,7 @@ def game_io():
         tree.pos.print_board()
         tree = tree_search(tree, N_SIMS)
         if tree.pos.last is None and tree.pos.last2 is None:
-            print('Game over, score: B%d' % (tree.pos.score(),))
+            print('Game over, score: B%+d' % (tree.pos.score(),))
             break
         if float(tree.w)/tree.v < RESIGN_THRES:
             print('I resign.')

@@ -31,14 +31,14 @@ empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
-N_SIMS = 1000
+N_SIMS = 2000
 UCB1_C = 0.1
 RAVE_EQUIV = 1500
 EXPAND_VISITS = 2
 PRIOR_EVEN = 3
 PRIOR_CAPTURE = 5
 PRIOR_PAT3 = 5
-REPORT_PERIOD = 20
+REPORT_PERIOD = 200
 RESIGN_THRES = 0.2
 
 patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses

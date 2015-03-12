@@ -39,6 +39,7 @@ PRIOR_EVEN = 10
 PRIOR_CAPTURE = 10
 PRIOR_PAT3 = 10
 REPORT_PERIOD = 200
+PROB_SAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 RESIGN_THRES = 0.2
 
 patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
@@ -141,10 +142,13 @@ def contact(board, p):
         return m.end() - 1
 
 
-def fix_atari(board, c):
+def fix_atari(board, c, singlept_ok=False):
     """ return None if not in atari or unable to escape atari,
-    the saving liberty coordinate otherwise """
+    the saving liberty coordinate otherwise; singlept_ok means
+    that we will not try to save one-point groups (ko) """
     fboard = floodfill(board, c)
+    if singlept_ok and fboard.count('#') == 1:
+        return None
     # Find a liberty
     l = contact(fboard, '.')
     # Ok, any other liberty?
@@ -419,10 +423,16 @@ def mcplayout(pos, amaf_map, disp=False):
             if disp and kind != 'random':
                 print('move suggestion', str_coord(c), kind, file=sys.stderr)
             pos2 = pos.move(c)
-            if pos2 is not None:
-                if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
-                    amaf_map[c] = 1 if pos.n % 2 == 0 else -1
-                break
+            if pos2 is None:
+                continue
+            if kind != 'random' and random.random() <= PROB_SAREJECT \
+               and fix_atari(pos2.board, c, singlept_ok=True) is not None:
+                if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
+                pos2 = None
+                continue
+            if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
+                amaf_map[c] = 1 if pos.n % 2 == 0 else -1
+            break
         if pos2 is None:  # no valid moves, pass
             pos = pos.pass_move()
             passes += 1

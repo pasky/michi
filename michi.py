@@ -705,12 +705,96 @@ def game_io(computer_black=False):
 
         tree = tree_search(tree, N_SIMS)
         if tree.pos.last is None and tree.pos.last2 is None:
-            print('Game over, score: B%+d' % (tree.pos.score(),))
+            print('Game over, score: B%+.1f' % (tree.pos.score(),))
             break
         if float(tree.w)/tree.v < RESIGN_THRES:
             print('I resign.')
             break
     print('Thank you for the game!')
+
+
+def gtp_io():
+    """ GTP interface for our program.  We can play only on the board size
+    which is configured (N), and we ignore color information and assume
+    alternating play! """
+    tree = TreeNode(pos=empty_position())
+    tree.expand()
+
+    for line in sys.stdin:
+        line = line.rstrip()
+        command = [s.lower() for s in line.split()]
+        if re.match('\d+', command[0]):
+            cmdid = command[0]
+            command = command[1:]
+        else:
+            cmdid = ''
+        ret = ''
+        if command[0] == "boardsize":
+            if int(command[1]) != N:
+                print("Warning: Trying to set incompatible boardsize %s (!= %d)" % (command[1], N), file=sys.stderr)
+        elif command[0] == "clear_board":
+            tree = TreeNode(pos=empty_position())
+            tree.expand()
+        elif command[0] == "komi":
+            # XXX: can we do this nicer?!
+            tree.pos = Position(board=tree.pos.board, cap=(tree.pos.cap[0], tree.pos.cap[1]),
+                n=tree.pos.n, ko=tree.pos.ko, last=tree.pos.last, last2=tree.pos.last2,
+                komi=float(command[1]))
+        elif command[0] == "play":
+            c = parse_coord(command[2])
+            if c is not None:
+                # Not a pass
+                if tree.pos.board[c] != '.':
+                    print('Bad move (not empty point)')
+                    continue
+
+                # Find the next node in the game tree and proceed there
+                if tree.children is None:
+                    tree.expand()  # Triggers in case of several plays in row
+                nodes = filter(lambda n: n.pos.last == c, tree.children)
+                if not nodes:
+                    print('Bad move (rule violation)')
+                    continue
+                tree = nodes[0]
+
+            else:
+                # Pass move
+                if tree.children[0].pos.last is None:
+                    tree = tree.children[0]
+                else:
+                    tree = TreeNode(pos=tree.pos.pass_move())
+        elif command[0] == "genmove":
+            tree = tree_search(tree, N_SIMS)
+            if tree.pos.last is None and tree.pos.last2 is None:
+                ret = 'pass'
+            elif float(tree.w)/tree.v < RESIGN_THRES:
+                ret = 'resign'
+            else:
+                ret = str_coord(tree.pos.last)
+        elif command[0] == "final_score":
+            score = tree.pos.score()
+            if score == 0:
+                ret = '0'
+            elif score > 0:
+                ret = 'B+%.1f' % (score,)
+            elif score < 0:
+                ret = 'W+%.1f' % (-score,)
+        elif command[0] == "name":
+            ret = 'michi'
+        elif command[0] == "version":
+            ret = 'simple go program demo'
+        elif command[0] == "tsdebug":
+            tree_search(tree, N_SIMS, disp=True).pos.print_board()
+        else:
+            print('Warning: Ignoring unknown command - %s' % (line,), file=sys.stderr)
+            ret = None
+
+        tree.pos.print_board(sys.stderr)
+        if ret is not None:
+            print('=%s %s\n\n' % (cmdid, ret,), end='')
+        else:
+            print('?%s ???\n\n' % (cmdid,), end='')
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":
@@ -719,6 +803,8 @@ if __name__ == "__main__":
         game_io()
     elif sys.argv[1] == "white":
         game_io(computer_black=True)
+    elif sys.argv[1] == "gtp":
+        gtp_io()
     elif sys.argv[1] == "mcdebug":
         print(mcplayout(empty_position(), W*W*[0], disp=True)[0])
     elif sys.argv[1] == "mcbenchmark":

@@ -33,11 +33,12 @@ MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 2000
 UCB1_C = 0.1
-RAVE_EQUIV = 1500  # quite low, but we are tuned for small #sims
+RAVE_EQUIV = 3000  # quite low, but we are tuned for small #sims
 EXPAND_VISITS = 2
 PRIOR_EVEN = 10
 PRIOR_CAPTURE = 10
 PRIOR_PAT3 = 10
+PRIOR_LOCAL = 10
 REPORT_PERIOD = 200
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
@@ -502,6 +503,10 @@ class TreeNode():
             elif kind == 'pat3':
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
+
+            if c in self.pos.last_moves_neighbors():
+                node.pv += PRIOR_LOCAL
+                node.pw += PRIOR_LOCAL
 
         if not self.children:
             # No possible moves, add a pass move

@@ -526,7 +526,7 @@ class TreeNode():
         """ print this node and all its children with v >= thres. """
         print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, urgency %.3f)" %
               (indent*' ', str_coord(self.pos.last), self.winrate(),
-               self.w, self.v, self.pw, self.pv, self.av, self.aw,
+               self.w, self.v, self.pw, self.pv, self.aw, self.av,
                float(self.aw)/self.av if self.av > 0 else float('nan'),
                self.rave_urgency()))
         for child in sorted(self.children, key=lambda n: n.v, reverse=True):

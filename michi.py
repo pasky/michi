@@ -667,38 +667,40 @@ def str_coord(c):
     return '%c%d' % (colstr[col], N - row)
 
 
-def game_io():
+def game_io(computer_black=False):
     """ A simple UI for playing on the board, no move generation involved;
     intended for testing. """
 
     tree = TreeNode(pos=empty_position())
     tree.expand()
     while True:
-        tree.pos.print_board(sys.stdout)
+        if not (tree.pos.n == 0 and computer_black):
+            tree.pos.print_board(sys.stdout)
 
-        sc = raw_input("Your move: ")
-        c = parse_coord(sc)
-        if c is not None:
-            # Not a pass
-            if tree.pos.board[c] != '.':
-                print('Bad move (not empty point)')
-                continue
+            sc = raw_input("Your move: ")
+            c = parse_coord(sc)
+            if c is not None:
+                # Not a pass
+                if tree.pos.board[c] != '.':
+                    print('Bad move (not empty point)')
+                    continue
 
-            # Find the next node in the game tree and proceed there
-            nodes = filter(lambda n: n.pos.last == c, tree.children)
-            if not nodes:
-                print('Bad move (rule violation)')
-                continue
-            tree = nodes[0]
+                # Find the next node in the game tree and proceed there
+                nodes = filter(lambda n: n.pos.last == c, tree.children)
+                if not nodes:
+                    print('Bad move (rule violation)')
+                    continue
+                tree = nodes[0]
 
-        else:
-            # Pass move
-            if tree.children[0].pos.last is None:
-                tree = tree.children[0]
             else:
-                tree = TreeNode(pos=tree.pos.pass_move())
+                # Pass move
+                if tree.children[0].pos.last is None:
+                    tree = tree.children[0]
+                else:
+                    tree = TreeNode(pos=tree.pos.pass_move())
 
-        tree.pos.print_board()
+            tree.pos.print_board()
+
         tree = tree_search(tree, N_SIMS)
         if tree.pos.last is None and tree.pos.last2 is None:
             print('Game over, score: B%+d' % (tree.pos.score(),))
@@ -713,6 +715,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         # Default action
         game_io()
+    elif sys.argv[1] == "white":
+        game_io(computer_black=True)
     elif sys.argv[1] == "mcdebug":
         print(mcplayout(empty_position(), W*W*[0], disp=True)[0])
     elif sys.argv[1] == "mcbenchmark":

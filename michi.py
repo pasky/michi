@@ -385,21 +385,24 @@ def neighborhood(board, c):
 
 # montecarlo playout policy
 
-def gen_playout_moves(pos):
+def gen_playout_moves(pos, heuristic_set):
     """ Yield candidate next moves in the order of preference; this is one
-    of the main places where heuristics dwell, try adding more! """
-    local_moves = pos.last_moves_neighbors()
+    of the main places where heuristics dwell, try adding more!
+
+    heuristic_set is the set of coordinates considered for applying heuristics;
+    this is the immediate neighborhood of last two moves in the playout, but
+    the whole board while prioring the tree. """
 
     # Check whether any local group is in atari and fill that liberty
-    # print('local moves', [str_coord(c) for c in local_moves], file=sys.stderr)
-    for c in local_moves:
+    # print('local moves', [str_coord(c) for c in heuristic_set], file=sys.stderr)
+    for c in heuristic_set:
         if pos.board[c] in 'Xx':
             d = fix_atari(pos.board, c)
             if d is not None:
                 yield (d, 'capture')
 
     # Try to apply a 3x3 pattern on the local neighborhood
-    for c in local_moves:
+    for c in heuristic_set:
         if pos.board[c] == '.' and neighborhood(pos.board, c) in pat3set:
             yield (c, 'pat3')
 
@@ -422,7 +425,7 @@ def mcplayout(pos, amaf_map, disp=False):
         if disp:  pos.print_board()
 
         pos2 = None
-        for c, kind in gen_playout_moves(pos):
+        for c, kind in gen_playout_moves(pos, pos.last_moves_neighbors()):
             if disp and kind != 'random':
                 print('move suggestion', str_coord(c), kind, file=sys.stderr)
             pos2 = pos.move(c)
@@ -480,7 +483,7 @@ class TreeNode():
         """ add and initialize children to a leaf node """
         self.children = []
         childset = dict()
-        for c, kind in gen_playout_moves(self.pos):
+        for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W)):
             pos2 = self.pos.move(c)
             if pos2 is None:
                 continue

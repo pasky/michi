@@ -42,6 +42,8 @@ REPORT_PERIOD = 200
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
 RESIGN_THRES = 0.2
+FASTPLAY20_THRES = 0.8  # if at 20% playouts winrate is >this, stop reading
+FASTPLAY5_THRES = 0.95  # if at 5% playouts winrate is >this, stop reading
 
 patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
        ["XOX",  # hane pattern - enclosing hane
@@ -652,6 +654,11 @@ def tree_search(tree, n, disp=False):
             score, amaf_map = job.get()
             tree_update(nodes, amaf_map, score, disp=disp)
             ongoing.remove((job, nodes))
+
+        # Early stop test
+        best_wr = tree.best_move().winrate()
+        if i > n*0.05 and best_wr > FASTPLAY5_THRES or i > n*0.2 and best_wr > FASTPLAY20_THRES:
+            break
 
     tree.dump_subtree()
     print(str_tree_summary(tree, i), file=sys.stderr)

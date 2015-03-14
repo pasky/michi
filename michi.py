@@ -522,13 +522,15 @@ class TreeNode():
         """ best move is the most simulated one """
         return self.children[max(enumerate([node.v for node in self.children]), key=itemgetter(1))[0]]
 
-    def dump_subtree(self, thres=N_SIMS/50, indent=0, f=sys.stderr):
+    def dump_subtree(self, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
         """ print this node and all its children with v >= thres. """
         print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, urgency %.3f)" %
               (indent*' ', str_coord(self.pos.last), self.winrate(),
                self.w, self.v, self.pw, self.pv, self.aw, self.av,
                float(self.aw)/self.av if self.av > 0 else float('nan'),
-               self.rave_urgency()))
+               self.rave_urgency()), file=f)
+        if not recurse:
+            return
         for child in sorted(self.children, key=lambda n: n.v, reverse=True):
             if child.v >= thres:
                 child.dump_subtree(thres=thres, indent=indent+3, f=f)
@@ -562,15 +564,15 @@ def tree_descend(tree, amaf_map, disp=False):
         # urgencies = list(enumerate([node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]))
         urgencies = list(enumerate([node.rave_urgency() for node in nodes[-1].children]))
         if disp:
-            nodes_urgencies = lambda node, urgencies: [(node.children[ci], u) for ci, u in urgencies]
-            print(', '.join(['%s:%d/%d:%.3f' % (str_coord(node.pos.last), node.w, node.v, u)
-                             for node, u in nodes_urgencies(nodes[-1], urgencies)]), file=sys.stderr)
+            for c in nodes[-1].children:
+                c.dump_subtree(recurse=False)
         random.shuffle(urgencies)  # randomize the max in case of equal urgency
         ci, u = max(urgencies, key=itemgetter(1))
 
         nodes.append(nodes[-1].children[ci])
 
         c = nodes[-1].pos.last
+        if disp:  print('chosen %s' % (str_coord(c),), file=sys.stderr)
         if c is None:
             passes += 1
         else:

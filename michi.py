@@ -707,7 +707,10 @@ def game_io(computer_black=False):
 
         tree = tree_search(tree, N_SIMS)
         if tree.pos.last is None and tree.pos.last2 is None:
-            print('Game over, score: B%+.1f' % (tree.pos.score(),))
+            score = tree.pos.score()
+            if tree.pos.n % 2:
+                score = -score
+            print('Game over, score: B%+.1f' % (score,))
             break
         if float(tree.w)/tree.v < RESIGN_THRES:
             print('I resign.')
@@ -775,6 +778,8 @@ def gtp_io():
                 ret = str_coord(tree.pos.last)
         elif command[0] == "final_score":
             score = tree.pos.score()
+            if tree.pos.n % 2:
+                score = -score
             if score == 0:
                 ret = '0'
             elif score > 0:
@@ -787,6 +792,10 @@ def gtp_io():
             ret = 'simple go program demo'
         elif command[0] == "tsdebug":
             tree_search(tree, N_SIMS, disp=True).pos.print_board()
+        elif command[0] == "list_commands":
+            ret = '\n'.join(['boardsize', 'clear_board', 'komi', 'play', 'genmove', 'final_score', 'name', 'version', 'list_commands', 'ts_debug'])
+        elif command[0] == "protocol_version":
+            ret = '2'
         else:
             print('Warning: Ignoring unknown command - %s' % (line,), file=sys.stderr)
             ret = None

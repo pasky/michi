@@ -39,7 +39,8 @@ PRIOR_EVEN = 10
 PRIOR_CAPTURE = 10
 PRIOR_PAT3 = 10
 REPORT_PERIOD = 200
-PROB_SAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
+PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
+PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
 RESIGN_THRES = 0.2
 
 patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
@@ -425,11 +426,12 @@ def mcplayout(pos, amaf_map, disp=False):
             pos2 = pos.move(c)
             if pos2 is None:
                 continue
-            if kind != 'random' and random.random() <= PROB_SAREJECT \
-               and fix_atari(pos2.board, c, singlept_ok=True) is not None:
-                if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
-                pos2 = None
-                continue
+            if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
+                atari_fix = fix_atari(pos2.board, c, singlept_ok=True)
+                if atari_fix is not None:
+                    if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
+                    pos2 = None
+                    continue
             if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
                 amaf_map[c] = 1 if pos.n % 2 == 0 else -1
             break

@@ -357,10 +357,31 @@ def fix_atari(pos, c, singlept_ok=False):
     l_new = contact(fboard, '.')
     fboard = board_put(fboard, l_new, 'L')
     # print(str_coord(l_new), fboard, file=sys.stderr)
-    if contact(fboard, '.') is not None:
-        return (True, l)  # good, there is still some liberty remaining
+    l_new_2 = contact(fboard, '.')
+    if l_new_2 is not None:
+        # Good, there is still some liberty remaining - but if it's
+        # just the two, check that we are not caught in a ladder...
+        if contact(board_put(fboard, l_new_2, 'L'), '.') is None and read_ladder_attack(escpos, l, l_new, l_new_2) is not None:
+            return (True, None)
+        else:
+            return (True, l)
 
     return (True, None)
+
+
+def read_ladder_attack(pos, c, l1, l2):
+    """ check if a capturable ladder is being pulled out at c and return
+    a move that continues it in that case; expects its two liberties as
+    l1, l2  (in fact, this is a general 2-lib captue exhaustive solver) """
+    for l in [l1, l2]:
+        pos_l = pos.move(l)
+        if pos_l is None:
+            continue
+        # fix_atari() will recursively call read_ladder_attack() back
+        is_atari, atari_escape = fix_atari(pos_l, c)
+        if is_atari and atari_escape is None:
+            return l
+    return None
 
 
 def cfg_distances(board, c):

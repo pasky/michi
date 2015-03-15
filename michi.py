@@ -35,6 +35,7 @@ EXPAND_VISITS = 2
 PRIOR_EVEN = 5
 PRIOR_CAPTURE = 15
 PRIOR_PAT3 = 15
+PRIOR_SELFATARI = 15  # prior losses
 PRIOR_CFG = [20, 15, 10]  # priors for moves in cfg dist. 1, 2, 3
 REPORT_PERIOD = 200
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
@@ -527,6 +528,11 @@ class TreeNode():
             elif kind == 'pat3':
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
+
+            atari_fix = fix_atari(pos2.board, c, singlept_ok=True)
+            if atari_fix is not None:
+                node.pv += PRIOR_SELFATARI
+                node.pw += 0  # negative prior
 
         if not self.children:
             # No possible moves, add a pass move

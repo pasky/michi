@@ -32,7 +32,7 @@ N_SIMS = 2000
 UCB1_C = 0.1
 RAVE_EQUIV = 3000
 EXPAND_VISITS = 2
-PRIOR_EVEN = 5
+PRIOR_EVEN = 6  # should be even number; 0.5 prior
 PRIOR_CAPTURE = 15
 PRIOR_PAT3 = 15
 PRIOR_SELFATARI = 15  # prior losses
@@ -510,7 +510,7 @@ class TreeNode():
         self.v = 0
         self.w = 0
         self.pv = PRIOR_EVEN
-        self.pw = PRIOR_EVEN
+        self.pw = PRIOR_EVEN/2
         self.av = 0
         self.aw = 0
         self.children = None

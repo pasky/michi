@@ -30,11 +30,11 @@ MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 2000
 UCB1_C = 0.1
-RAVE_EQUIV = 3000  # quite low, but we are tuned for small #sims
+RAVE_EQUIV = 3000
 EXPAND_VISITS = 2
-PRIOR_EVEN = 10
-PRIOR_CAPTURE = 10
-PRIOR_PAT3 = 10
+PRIOR_EVEN = 5
+PRIOR_CAPTURE = 15
+PRIOR_PAT3 = 15
 PRIOR_CFG = [45, 30, 15]  # priors for moves in cfg dist. 1, 2, 3
 REPORT_PERIOD = 200
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout

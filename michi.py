@@ -410,7 +410,7 @@ def pat_expand(pat):
 pat3set = set([p.replace('O', 'x') for p in patternsrc for p in pat_expand(p)])
 
 def neighborhood(board, c):
-    return board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]
+    return (board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]).replace('\n', ' ')
 
 
 ###########################

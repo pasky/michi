@@ -450,6 +450,10 @@ def mcplayout(pos, amaf_map, disp=False):
         if disp:  pos.print_board()
 
         pos2 = None
+        # We simply try the moves our heuristics generate, in a particular
+        # order.  This is called "rule-based playouts" and is easier to do,
+        # but the strongest programs use "probability distribution playouts"
+        # which use a more flexible approach to move selection.
         for c, kind in gen_playout_moves(pos, pos.last_moves_neighbors()):
             if disp and kind != 'random':
                 print('move suggestion', str_coord(c), kind, file=sys.stderr)

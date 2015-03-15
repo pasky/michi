@@ -317,23 +317,25 @@ def fix_atari(pos, c, singlept_ok=False):
     determining whether (i) it is in atari (ii) if it can escape it,
     either by playing on its liberty or counter-capturing another group.
 
-    The return value is a tuple of (boolean, coord), indicating whether
-    the group is in atari and how to escape/capture (or None if impossible).
+    The return value is a tuple of (boolean, [coord..]), indicating whether
+    the group is in atari and how to escape/capture (or [] if impossible).
 
     singlept_ok means that we will not try to save one-point groups (ko) """
 
     fboard = floodfill(pos.board, c)
     if singlept_ok and fboard.count('#') == 1:
-        return (False, None)
+        return (False, [])
     # Find a liberty
     l = contact(fboard, '.')
     # Ok, any other liberty?
     fboard = board_put(fboard, l, 'L')
     if contact(fboard, '.') is not None:
-        return (False, None)
+        return (False, [])
     # In atari! If it's the opponent's group, that's enough...
     if pos.board[c] == 'x':
-        return (True, l)
+        return (True, [l])
+
+    solutions = []
 
     # Before thinking about defense, what about counter-capturing
     # a neighboring group?
@@ -342,9 +344,9 @@ def fix_atari(pos, c, singlept_ok=False):
         othergroup = contact(ccboard, 'x')
         if othergroup is None:
             break
-        a, ccl = fix_atari(pos, othergroup)
-        if ccl is not None:
-            return (True, ccl)
+        a, ccls = fix_atari(pos, othergroup)
+        if ccls:
+            solutions += ccls
         # XXX: floodfill is better for big groups
         ccboard = board_put(ccboard, othergroup, '%')
 
@@ -352,7 +354,7 @@ def fix_atari(pos, c, singlept_ok=False):
     # at least two liberties?  Re-floodfill to account for connecting
     escpos = pos.move(l)
     if escpos is None:
-        return (True, None)  # oops, suicidal move
+        return (True, solutions)  # oops, suicidal move
     fboard = floodfill(escpos.board, l)
     l_new = contact(fboard, '.')
     fboard = board_put(fboard, l_new, 'L')
@@ -361,12 +363,10 @@ def fix_atari(pos, c, singlept_ok=False):
     if l_new_2 is not None:
         # Good, there is still some liberty remaining - but if it's
         # just the two, check that we are not caught in a ladder...
-        if contact(board_put(fboard, l_new_2, 'L'), '.') is None and read_ladder_attack(escpos, l, l_new, l_new_2) is not None:
-            return (True, None)
-        else:
-            return (True, l)
+        if contact(board_put(fboard, l_new_2, 'L'), '.') is not None or read_ladder_attack(escpos, l, l_new, l_new_2) is None:
+            solutions.append(l)
 
-    return (True, None)
+    return (True, solutions)
 
 
 def read_ladder_attack(pos, c, l1, l2):
@@ -379,7 +379,7 @@ def read_ladder_attack(pos, c, l1, l2):
             continue
         # fix_atari() will recursively call read_ladder_attack() back
         is_atari, atari_escape = fix_atari(pos_l, c)
-        if is_atari and atari_escape is None:
+        if is_atari and not atari_escape:
             return l
     return None
 
@@ -471,10 +471,12 @@ def gen_playout_moves(pos, heuristic_set):
     already_suggested = set()
     for c in heuristic_set:
         if pos.board[c] in 'Xx':
-            in_atari, d = fix_atari(pos, c)
-            if d is not None and d not in already_suggested:
-                yield (d, 'capture')
-                already_suggested.add(d)
+            in_atari, ds = fix_atari(pos, c)
+            random.shuffle(ds)
+            for d in ds:
+                if d not in already_suggested:
+                    yield (d, 'capture')
+                    already_suggested.add(d)
 
     # Try to apply a 3x3 pattern on the local neighborhood
     already_suggested = set()
@@ -513,7 +515,7 @@ def mcplayout(pos, amaf_map, disp=False):
             if pos2 is None:
                 continue
             if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
-                in_atari, d = fix_atari(pos2, c, singlept_ok=True)
+                in_atari, ds = fix_atari(pos2, c, singlept_ok=True)
                 if in_atari:
                     if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
                     pos2 = None
@@ -606,7 +608,7 @@ class TreeNode():
                     node.pv += PRIOR_EMPTYAREA
                     node.pw += PRIOR_EMPTYAREA
 
-            in_atari, d = fix_atari(pos2, c, singlept_ok=True)
+            in_atari, ds = fix_atari(pos2, c, singlept_ok=True)
             if in_atari:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior

@@ -847,8 +847,8 @@ def gtp_io():
     tree = TreeNode(pos=empty_position())
     tree.expand()
 
-    for line in sys.stdin:
-        line = line.rstrip()
+    while True:
+        line = raw_input().rstrip()
         command = [s.lower() for s in line.split()]
         if re.match('\d+', command[0]):
             cmdid = command[0]

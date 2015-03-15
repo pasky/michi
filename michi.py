@@ -365,7 +365,6 @@ def fix_atari(pos, c, singlept_ok=False):
     fboard = floodfill(escpos.board, l)
     l_new = contact(fboard, '.')
     fboard = board_put(fboard, l_new, 'L')
-    # print(str_coord(l_new), fboard, file=sys.stderr)
     l_new_2 = contact(fboard, '.')
     if l_new_2 is not None:
         # Good, there is still some liberty remaining - but if it's
@@ -567,10 +566,16 @@ class TreeNode():
         cfg_map = cfg_distances(self.pos.board, self.pos.last) if self.pos.last is not None else None
         self.children = []
         childset = dict()
+        # Use playout generator to generate children and initialize them
+        # with some priors to bias search towards more sensible moves.
+        # Note that there can be many ways to incorporate the priors in
+        # next node selection (progressive bias, progressive widening, ...).
         for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W)):
             pos2 = self.pos.move(c)
             if pos2 is None:
                 continue
+            # gen_playout_moves() will generate duplicate suggestions
+            # if a move is yielded by multiple heuristics
             try:
                 node = childset[pos2.last]
             except KeyError:
@@ -578,8 +583,6 @@ class TreeNode():
                 self.children.append(node)
                 childset[pos2.last] = node
 
-            # Add some priors to bias search towards more sensible moves
-            # Note that there are many other ways to incorporate the priors
             if kind == 'capture':
                 node.pv += PRIOR_CAPTURE
                 node.pw += PRIOR_CAPTURE
@@ -587,9 +590,13 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
-            if cfg_map is not None and cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
-                node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
-                node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
+        # Second pass setting priors, considering each move just once now
+        for node in self.children:
+            c = node.pos.last
+
+            if cfg_map is not None and cfg_map[c]-1 < len(PRIOR_CFG):
+                node.pv += PRIOR_CFG[cfg_map[c]-1]
+                node.pw += PRIOR_CFG[cfg_map[c]-1]
 
             height = line_height(c)  # 0-indexed
             if height <= 2 and empty_area(self.pos.board, c):
@@ -602,10 +609,11 @@ class TreeNode():
                     node.pv += PRIOR_EMPTYAREA
                     node.pw += PRIOR_EMPTYAREA
 
-            in_atari, ds = fix_atari(pos2, c, singlept_ok=True)
+            in_atari, ds = fix_atari(node.pos, c, singlept_ok=True)
             if in_atari:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
+
         if not self.children:
             # No possible moves, add a pass move
             self.children.append(TreeNode(self.pos.pass_move()))

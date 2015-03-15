@@ -49,3 +49,23 @@ you should verify how it works in a more competitive engine (in conjunction
 with other heuristics and many more playouts) and play-test it on at least
 a few hundred games with a reference opponent (not just the program without
 the heuristic, self-play testing greatly exaggerates any improvements).
+
+TODO
+----
+
+Strong Computer Go programs tend to accumulate many specialized,
+sophisticated, individually low-yield heuristics.  These are mostly
+out of scope of Michi in order to keep things short and simple.
+However, other than that, there are certainly things that Michi should
+or could contain, roughly in order of priority:
+
+  * Superko support.
+  * Support for early passing and GTP stone status protocol.
+  * Simple time management.
+  * gogui visualization support.
+  * Group/liberty tracking in the board position implementation.
+  * Probability distribution playouts.
+  * Some popular variant of the last-good-reply policy.
+  * Most crucial heuristics: Better ko fight support, throwin detection,
+    nakade support, ...
+  * Diminishing RAVE by origin move number and other fancy algorithmics.

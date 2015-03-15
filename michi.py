@@ -1,11 +1,8 @@
 #!/usr/bin/env pypy
 # -*- coding: utf-8 -*-
-
-# The below is currently not true:
-## This is the main Michi module that implements the complete search logic.
-## The Go board implementation can be found in board.py.
-## This file is not executable - it needs to be used through a user interface
-## frontend like gtpmichi.py or textmichi.py.
+# A minimalistic Go-playing engine attempting to strike a balance between
+# brevity, educational value and strength.  It can beat GNUGo on 9x9 board
+# on a modest 4-thread computer.
 
 # FIXME: No superko support.  This is a big bug, of course.
 
@@ -92,6 +89,7 @@ patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
        ]
 
 
+#######################
 # board string routines
 
 def neighbors(c):
@@ -146,50 +144,8 @@ def contact(board, p):
         return m.end() - 1
 
 
-def fix_atari(board, c, singlept_ok=False):
-    """ return None if not in atari or unable to escape atari,
-    the saving liberty coordinate otherwise; singlept_ok means
-    that we will not try to save one-point groups (ko) """
-    fboard = floodfill(board, c)
-    if singlept_ok and fboard.count('#') == 1:
-        return None
-    # Find a liberty
-    l = contact(fboard, '.')
-    # Ok, any other liberty?
-    fboard = board_put(fboard, l, 'L')
-    if contact(fboard, '.') is not None:
-        return None
-    # In atari! If it's the opponent's group, that's enough...
-    if board[c] == 'x':
-        return l
-
-    # We are escaping.  Will playing this liberty gain
-    # at least two liberties?  Re-floodfill to account for connecting
-    fboard = floodfill(board_put(board, l, 'X'), l)
-    l_new = contact(fboard, '.')
-    if l_new is None:
-        return None  # oops, suicidal move
-    fboard = board_put(fboard, l_new, 'L')
-    # print(str_coord(l_new), fboard, file=sys.stderr)
-    if contact(fboard, '.') is not None:
-        return l  # good, there is still some liberty remaining
-
-    # Playing this liberty won't work, what about counter-capturing
-    # a neighboring group?
-    while True:
-        othergroup = contact(fboard, 'x')
-        if othergroup is None:
-            break
-        l = fix_atari(board, othergroup)
-        if l is not None:
-            return l
-        # XXX: floodfill is better for big groups
-        fboard = board_put(fboard, othergroup, '%')
-    return None
-
-
 def is_eyeish(board, c):
-    """ test if c is inside a single-color diamong and return the diamond
+    """ test if c is inside a single-color diamond and return the diamond
     color or None; this could be an eye, but also a false one """
     eyecolor = None
     for d in neighbors(c):
@@ -230,23 +186,6 @@ def is_eye(board, c):
 class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     """ Implementation of simple Chinese Go rules;
     n is how many moves were played so far """
-
-    def print_board(self, f=sys.stderr):
-        if self.n % 2 == 0:  # to-play is black
-            board = self.board.replace('x', 'O')
-            Xcap, Ocap = self.cap
-        else:  # to-play is white
-            board = self.board.replace('X', 'O').replace('x', 'X')
-            Ocap, Xcap = self.cap
-        print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi), file=f)
-        pretty_board = ' '.join(board.rstrip())
-        if self.last is not None:
-            pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
-        rowcounter = count()
-        pretty_board = "\n".join([' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)])
-        print(pretty_board, file=f)
-        print('    ' + ' '.join(colstr[:N]), file=f)
-        print('', file=f)
 
     def move(self, c):
         """ play as player X at the given coord c, return the new position """
@@ -345,10 +284,72 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
         komi = self.komi if self.n % 2 == 1 else -self.komi
         return board.count('X') - board.count('x') + komi
 
+    def print_board(self, f=sys.stderr):
+        if self.n % 2 == 0:  # to-play is black
+            board = self.board.replace('x', 'O')
+            Xcap, Ocap = self.cap
+        else:  # to-play is white
+            board = self.board.replace('X', 'O').replace('x', 'X')
+            Ocap, Xcap = self.cap
+        print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi), file=f)
+        pretty_board = ' '.join(board.rstrip())
+        if self.last is not None:
+            pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
+        rowcounter = count()
+        pretty_board = "\n".join([' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)])
+        print(pretty_board, file=f)
+        print('    ' + ' '.join(colstr[:N]), file=f)
+        print('', file=f)
+
 
 def empty_position():
     """ Return an initial board position """
     return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None, komi=7.5)
+
+
+###############
+# go heuristics
+
+def fix_atari(board, c, singlept_ok=False):
+    """ Determine whether group at coordinate c is in atari and able
+    to escape it, returning the saving liberty coordinate;
+    singlept_ok means that we will not try to save one-point groups (ko) """
+    fboard = floodfill(board, c)
+    if singlept_ok and fboard.count('#') == 1:
+        return None
+    # Find a liberty
+    l = contact(fboard, '.')
+    # Ok, any other liberty?
+    fboard = board_put(fboard, l, 'L')
+    if contact(fboard, '.') is not None:
+        return None
+    # In atari! If it's the opponent's group, that's enough...
+    if board[c] == 'x':
+        return l
+
+    # We are escaping.  Will playing this liberty gain
+    # at least two liberties?  Re-floodfill to account for connecting
+    fboard = floodfill(board_put(board, l, 'X'), l)
+    l_new = contact(fboard, '.')
+    if l_new is None:
+        return None  # oops, suicidal move
+    fboard = board_put(fboard, l_new, 'L')
+    # print(str_coord(l_new), fboard, file=sys.stderr)
+    if contact(fboard, '.') is not None:
+        return l  # good, there is still some liberty remaining
+
+    # Playing this liberty won't work, what about counter-capturing
+    # a neighboring group?
+    while True:
+        othergroup = contact(fboard, 'x')
+        if othergroup is None:
+            break
+        l = fix_atari(board, othergroup)
+        if l is not None:
+            return l
+        # XXX: floodfill is better for big groups
+        fboard = board_put(fboard, othergroup, '%')
+    return None
 
 
 # pattern routines
@@ -384,6 +385,7 @@ def neighborhood(board, c):
     return board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]
 
 
+###########################
 # montecarlo playout policy
 
 def gen_playout_moves(pos, heuristic_set):
@@ -462,7 +464,8 @@ def mcbenchmark(n):
     return float(sumscore) / n
 
 
-# Monte Carlo tree, grown asymmetrically
+########################
+# montecarlo tree search
 
 class TreeNode():
     """ Monte-Carlo tree node;
@@ -672,6 +675,9 @@ def tree_search(tree, n, disp=False):
     print(str_tree_summary(tree, i), file=sys.stderr)
     return tree.best_move()
 
+
+###################
+# user interface(s)
 
 def parse_coord(s):
     if s == 'pass':

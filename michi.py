@@ -35,7 +35,7 @@ EXPAND_VISITS = 2
 PRIOR_EVEN = 10
 PRIOR_CAPTURE = 10
 PRIOR_PAT3 = 10
-PRIOR_LOCAL = 10
+PRIOR_CFG = [45, 30, 15]  # priors for moves in cfg dist. 1, 2, 3
 REPORT_PERIOD = 200
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
@@ -352,6 +352,27 @@ def fix_atari(board, c, singlept_ok=False):
     return None
 
 
+def cfg_distances(board, c):
+    """ return a board map listing common fate graph distances from
+    a given point - this corresponds to the concept of locality while
+    contracting groups to single points """
+    cfg_map = W*W*[-1]
+    cfg_map[c] = 0
+
+    fringe = [c]
+    while fringe:
+        c = fringe.pop()
+        for d in neighbors(c):
+            if board[d].isspace() or cfg_map[d] >= 0:
+                continue
+            if board[d] != '.' and board[d] == board[c]:
+                cfg_map[d] = cfg_map[c]
+            else:
+                cfg_map[d] = cfg_map[c] + 1
+            fringe.append(d)
+    return cfg_map
+
+
 # pattern routines
 
 def pat_expand(pat):
@@ -507,13 +528,19 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
-            if c in self.pos.last_moves_neighbors():
-                node.pv += PRIOR_LOCAL
-                node.pw += PRIOR_LOCAL
-
         if not self.children:
             # No possible moves, add a pass move
             self.children.append(TreeNode(self.pos.pass_move()))
+            return
+
+        # Add CFG prior
+        if self.pos.last is not None:
+            cfg_map = cfg_distances(self.pos.board, self.pos.last)
+            for node in self.children:
+                assert cfg_map[node.pos.last] > 0
+                if cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
+                    node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
+                    node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
 
     def ucb1_urgency(self, n0):
         expectation = float(self.w+self.pw)/(self.v+self.pv)

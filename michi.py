@@ -523,6 +523,10 @@ class TreeNode():
 
     def expand(self):
         """ add and initialize children to a leaf node """
+        if self.pos.last is not None:
+            cfg_map = cfg_distances(self.pos.board, self.pos.last)
+        else:
+            cfg_map = None
         self.children = []
         childset = dict()
         for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W)):
@@ -545,6 +549,12 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
+            if cfg_map is not None:
+                assert cfg_map[node.pos.last] > 0
+                if cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
+                    node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
+                    node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
+
             in_atari, d = fix_atari(pos2.board, c, singlept_ok=True)
             if in_atari:
                 node.pv += PRIOR_SELFATARI
@@ -554,15 +564,6 @@ class TreeNode():
             # No possible moves, add a pass move
             self.children.append(TreeNode(self.pos.pass_move()))
             return
-
-        # Add CFG prior
-        if self.pos.last is not None:
-            cfg_map = cfg_distances(self.pos.board, self.pos.last)
-            for node in self.children:
-                assert cfg_map[node.pos.last] > 0
-                if cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
-                    node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
-                    node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
 
     def ucb1_urgency(self, n0):
         expectation = float(self.w+self.pw)/(self.v+self.pv)

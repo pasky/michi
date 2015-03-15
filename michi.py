@@ -334,7 +334,20 @@ def fix_atari(board, c, singlept_ok=False):
     if board[c] == 'x':
         return (True, l)
 
-    # We are escaping.  Will playing this liberty gain
+    # Before thinking about defense, what about counter-capturing
+    # a neighboring group?
+    ccboard = fboard
+    while True:
+        othergroup = contact(ccboard, 'x')
+        if othergroup is None:
+            break
+        a, ccl = fix_atari(board, othergroup)
+        if ccl is not None:
+            return (True, ccl)
+        # XXX: floodfill is better for big groups
+        ccboard = board_put(ccboard, othergroup, '%')
+
+    # We are escaping.  Will playing our last liberty gain
     # at least two liberties?  Re-floodfill to account for connecting
     fboard = floodfill(board_put(board, l, 'X'), l)
     l_new = contact(fboard, '.')
@@ -345,17 +358,6 @@ def fix_atari(board, c, singlept_ok=False):
     if contact(fboard, '.') is not None:
         return (True, l)  # good, there is still some liberty remaining
 
-    # Playing this liberty won't work, what about counter-capturing
-    # a neighboring group?
-    while True:
-        othergroup = contact(fboard, 'x')
-        if othergroup is None:
-            break
-        a, l = fix_atari(board, othergroup)
-        if l is not None:
-            return (True, l)
-        # XXX: floodfill is better for big groups
-        fboard = board_put(fboard, othergroup, '%')
     return (True, None)
 
 

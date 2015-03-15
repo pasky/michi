@@ -312,7 +312,7 @@ def empty_position():
 ###############
 # go heuristics
 
-def fix_atari(board, c, singlept_ok=False):
+def fix_atari(pos, c, singlept_ok=False):
     """ An atari/capture analysis routine that checks the group at c,
     determining whether (i) it is in atari (ii) if it can escape it,
     either by playing on its liberty or counter-capturing another group.
@@ -322,7 +322,7 @@ def fix_atari(board, c, singlept_ok=False):
 
     singlept_ok means that we will not try to save one-point groups (ko) """
 
-    fboard = floodfill(board, c)
+    fboard = floodfill(pos.board, c)
     if singlept_ok and fboard.count('#') == 1:
         return (False, None)
     # Find a liberty
@@ -332,7 +332,7 @@ def fix_atari(board, c, singlept_ok=False):
     if contact(fboard, '.') is not None:
         return (False, None)
     # In atari! If it's the opponent's group, that's enough...
-    if board[c] == 'x':
+    if pos.board[c] == 'x':
         return (True, l)
 
     # Before thinking about defense, what about counter-capturing
@@ -342,7 +342,7 @@ def fix_atari(board, c, singlept_ok=False):
         othergroup = contact(ccboard, 'x')
         if othergroup is None:
             break
-        a, ccl = fix_atari(board, othergroup)
+        a, ccl = fix_atari(pos, othergroup)
         if ccl is not None:
             return (True, ccl)
         # XXX: floodfill is better for big groups
@@ -350,10 +350,11 @@ def fix_atari(board, c, singlept_ok=False):
 
     # We are escaping.  Will playing our last liberty gain
     # at least two liberties?  Re-floodfill to account for connecting
-    fboard = floodfill(board_put(board, l, 'X'), l)
-    l_new = contact(fboard, '.')
-    if l_new is None:
+    escpos = pos.move(l)
+    if escpos is None:
         return (True, None)  # oops, suicidal move
+    fboard = floodfill(escpos.board, l)
+    l_new = contact(fboard, '.')
     fboard = board_put(fboard, l_new, 'L')
     # print(str_coord(l_new), fboard, file=sys.stderr)
     if contact(fboard, '.') is not None:
@@ -449,7 +450,7 @@ def gen_playout_moves(pos, heuristic_set):
     already_suggested = set()
     for c in heuristic_set:
         if pos.board[c] in 'Xx':
-            in_atari, d = fix_atari(pos.board, c)
+            in_atari, d = fix_atari(pos, c)
             if d is not None and d not in already_suggested:
                 yield (d, 'capture')
                 already_suggested.add(d)
@@ -491,7 +492,7 @@ def mcplayout(pos, amaf_map, disp=False):
             if pos2 is None:
                 continue
             if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
-                in_atari, d = fix_atari(pos2.board, c, singlept_ok=True)
+                in_atari, d = fix_atari(pos2, c, singlept_ok=True)
                 if in_atari:
                     if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
                     pos2 = None
@@ -584,7 +585,7 @@ class TreeNode():
                     node.pv += PRIOR_EMPTYAREA
                     node.pw += PRIOR_EMPTYAREA
 
-            in_atari, d = fix_atari(pos2.board, c, singlept_ok=True)
+            in_atari, d = fix_atari(pos2, c, singlept_ok=True)
             if in_atari:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
@@ -733,7 +734,7 @@ def tree_search(tree, n, disp=False):
             amaf_map = W*W*[0]
             nodes = tree_descend(tree, amaf_map, disp=disp)
 
-            # Issue a mcplayout job to the worker pool
+            # Issue an mcplayout job to the worker pool
             ongoing.append((pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
 
         # Any playouts are finished yet?

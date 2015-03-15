@@ -1,18 +1,33 @@
 #!/usr/bin/env pypy
 # -*- coding: utf-8 -*-
+#
+# (c) Petr Baudis <pasky@ucw.cz>  2015
+# MIT licence (i.e. almost public domain)
+#
 # A minimalistic Go-playing engine attempting to strike a balance between
 # brevity, educational value and strength.  It can beat GNUGo on 13x13 board
 # on a modest 4-thread laptop.
-
-# FIXME: No superko support.  This is a big bug, of course.
+#
+# When benchmarking, note that at the beginning of the first move the program
+# runs much slower because pypy is JIT compiling on the background!
+#
+# To start reading the code, begin either:
+# * Bottom up, by looking at the goban implementation - starting with
+#   the 'empty' definition below and Position.move() method
+# * In the middle, by looking at the Monte Carlo playout implementation,
+#   starting with the mcplayout() function
+# * Top down, by looking at the MCTS implementation, starting with the
+#   tree_search() function.  It can look a little confusing due to the
+#   parallelization, but really is just a loop of tree_descend(),
+#   mcplayout() and tree_update() round and round
+# It may be better to jump around a bit instead of just reading straight
+# from start to end.
 
 from __future__ import print_function
 from collections import namedtuple
 from itertools import count
-import math
 import multiprocessing
 from multiprocessing.pool import Pool
-from operator import itemgetter
 import random
 import re
 import sys
@@ -22,6 +37,7 @@ import sys
 # as an (N+1)*(N+2) string, with '.' (empty), 'X' (to-play player),
 # 'x' (other player), and whitespace (off-board border to make rules
 # implementation easier).  Coordinates are just indices in this string.
+# You can simply print(board) when debugging.
 N = 13
 W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
@@ -29,7 +45,6 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 2000
-UCB1_C = 0.1
 RAVE_EQUIV = 3000
 EXPAND_VISITS = 2
 PRIOR_EVEN = 6  # should be even number; 0.5 prior
@@ -113,7 +128,6 @@ def floodfill(board, c):
     p = board[c]
     board = board_put(board, c, '#')
     fringe = [c]
-    # XXX: Shoot beams to speed things up
     while fringe:
         c = fringe.pop()
         for d in neighbors(c):
@@ -127,11 +141,10 @@ def floodfill(board, c):
 contact_res = dict()
 for p in ['.', 'x', 'X']:
     rp = '\\.' if p == '.' else p
-    contact_res_src = [
-        '#' + rp,  # p at right
-        rp + '#',  # p at left
-        '#' + '.'*(W-1) + rp,  # p below
-        rp + '.'*(W-1) + '#']  # p above
+    contact_res_src = ['#' + rp,  # p at right
+                       rp + '#',  # p at left
+                       '#' + '.'*(W-1) + rp,  # p below
+                       rp + '.'*(W-1) + '#']  # p above
     contact_res[p] = re.compile('|'.join(contact_res_src), flags=re.DOTALL)
 
 def contact(board, p):
@@ -140,10 +153,7 @@ def contact(board, p):
     m = contact_res[p].search(board)
     if not m:
         return None
-    if m.group(0)[0] == p:
-        return m.start()
-    else:
-        return m.end() - 1
+    return m.start() if m.group(0)[0] == p else m.end() - 1
 
 
 def is_eyeish(board, c):
@@ -217,22 +227,19 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             capX += capcount
             board = fboard.replace('#', '.')  # capture the group
         # Set ko
-        if in_enemy_eye and len(singlecaps) == 1:
-            ko = singlecaps[0]
-        else:
-            ko = None
+        ko = singlecaps[0] if in_enemy_eye and len(singlecaps) == 1 else None
         # Test for suicide
         if contact(floodfill(board, c), '.') is None:
             return None
 
         # Update the position and return
         return Position(board=board.swapcase(), cap=(self.cap[1], capX),
-                n=self.n + 1, ko=ko, last=c, last2=self.last, komi=self.komi)
+                        n=self.n + 1, ko=ko, last=c, last2=self.last, komi=self.komi)
 
     def pass_move(self):
         """ pass - i.e. return a flipped position """
         return Position(board=self.board.swapcase(), cap=(self.cap[1], self.cap[0]),
-                n=self.n + 1, ko=None, last=None, last2=self.last, komi=self.komi)
+                        n=self.n + 1, ko=None, last=None, last2=self.last, komi=self.komi)
 
     def moves(self, i0):
         """ Generate a list of moves (includes false positives - suicide moves;
@@ -372,7 +379,7 @@ def fix_atari(pos, c, singlept_ok=False):
 def read_ladder_attack(pos, c, l1, l2):
     """ check if a capturable ladder is being pulled out at c and return
     a move that continues it in that case; expects its two liberties as
-    l1, l2  (in fact, this is a general 2-lib captue exhaustive solver) """
+    l1, l2  (in fact, this is a general 2-lib capture exhaustive solver) """
     for l in [l1, l2]:
         pos_l = pos.move(l)
         if pos_l is None:
@@ -531,17 +538,9 @@ def mcplayout(pos, amaf_map, disp=False):
         pos = pos2
     score = pos.score()
     if disp:  print('** SCORE B%+.1f **' % (score if pos.n % 2 == 0 else -score), file=sys.stderr)
-    if start_n % 2 == pos.n % 2:
-        return score, amaf_map
-    else:
-        return -score, amaf_map
-
-def mcbenchmark(n):
-    """ run n Monte-Carlo playouts from empty position, return avg. score """
-    sumscore = 0
-    for i in range(0, n):
-        sumscore += mcplayout(empty_position(), W*W*[0])[0]
-    return float(sumscore) / n
+    if start_n % 2 != pos.n % 2:
+        score = -score
+    return score, amaf_map
 
 
 ########################
@@ -565,10 +564,7 @@ class TreeNode():
 
     def expand(self):
         """ add and initialize children to a leaf node """
-        if self.pos.last is not None:
-            cfg_map = cfg_distances(self.pos.board, self.pos.last)
-        else:
-            cfg_map = None
+        cfg_map = cfg_distances(self.pos.board, self.pos.last) if self.pos.last is not None else None
         self.children = []
         childset = dict()
         for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W)):
@@ -591,13 +587,11 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
-            if cfg_map is not None:
-                assert cfg_map[node.pos.last] > 0
-                if cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
-                    node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
-                    node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
+            if cfg_map is not None and cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
+                node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
+                node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
 
-            height = line_height(c)  # 0-index
+            height = line_height(c)  # 0-indexed
             if height <= 2 and empty_area(self.pos.board, c):
                 # No stones around; negative prior for 1st + 2nd line, positive
                 # for 3rd line; sanitizes opening and invasions
@@ -612,15 +606,9 @@ class TreeNode():
             if in_atari:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
-
         if not self.children:
             # No possible moves, add a pass move
             self.children.append(TreeNode(self.pos.pass_move()))
-            return
-
-    def ucb1_urgency(self, n0):
-        expectation = float(self.w+self.pw)/(self.v+self.pv)
-        return expectation + UCB1_C * math.sqrt(2*math.log(n0) / (self.v+1))
 
     def rave_urgency(self):
         v = self.v + self.pv
@@ -632,13 +620,11 @@ class TreeNode():
         return beta * rave_expectation + (1-beta) * expectation
 
     def winrate(self):
-        if self.v == 0:
-            return float('nan')
-        return float(self.w) / self.v
+        return float(self.w) / self.v if self.v > 0 else float('nan')
 
     def best_move(self):
         """ best move is the most simulated one """
-        return self.children[max(enumerate([node.v for node in self.children]), key=itemgetter(1))[0]]
+        return max(self.children, key=lambda node: node.v) if self.children is not None else None
 
     def dump_subtree(self, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
         """ print this node and all its children with v >= thres. """
@@ -655,19 +641,15 @@ class TreeNode():
 
 
 def str_tree_summary(tree, sims):
-    best_nodes = [tree.children[i] for i, u in sorted(enumerate([n.v for n in tree.children]), key=itemgetter(1), reverse=True)[:5]]
+    best_nodes = sorted(tree.children, key=lambda n: n.v, reverse=True)[:5]
     best_seq = []
     node = tree
     while node is not None:
         best_seq.append(node.pos.last)
-        if node.children is None:
-            break
         node = node.best_move()
     return ('[%4d] winrate %.3f | seq %s | can %s' %
-            (sims, best_nodes[0].winrate(),
-             ' '.join([str_coord(c) for c in best_seq[1:6]]),
-             ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes]),
-             ))
+            (sims, best_nodes[0].winrate(), ' '.join([str_coord(c) for c in best_seq[1:6]]),
+             ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes])))
 
 
 def tree_descend(tree, amaf_map, disp=False):
@@ -679,28 +661,25 @@ def tree_descend(tree, amaf_map, disp=False):
         if disp:  nodes[-1].pos.print_board()
 
         # Pick the most urgent child
-        # urgencies = list(enumerate([node.ucb1_urgency(nodes[-1].v) for node in nodes[-1].children]))
-        urgencies = list(enumerate([node.rave_urgency() for node in nodes[-1].children]))
+        children = list(nodes[-1].children)
         if disp:
-            for c in nodes[-1].children:
+            for c in children:
                 c.dump_subtree(recurse=False)
-        random.shuffle(urgencies)  # randomize the max in case of equal urgency
-        ci, u = max(urgencies, key=itemgetter(1))
+        random.shuffle(children)  # randomize the max in case of equal urgency
+        node = max(children, key=lambda node: node.rave_urgency())
+        nodes.append(node)
 
-        nodes.append(nodes[-1].children[ci])
-
-        c = nodes[-1].pos.last
-        if disp:  print('chosen %s' % (str_coord(c),), file=sys.stderr)
-        if c is None:
+        if disp:  print('chosen %s' % (str_coord(node.pos.last),), file=sys.stderr)
+        if node.pos.last is None:
             passes += 1
         else:
             passes = 0
-            if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
-                amaf_map[c] = 1 if nodes[-2].pos.n % 2 == 0 else -1
+            if amaf_map[node.pos.last] == 0:  # Mark the coordinate with 1 for black
+                amaf_map[node.pos.last] = 1 if nodes[-2].pos.n % 2 == 0 else -1
 
-        nodes[-1].v += 1  # updating visits on the way down represents "virtual loss", relevant for parallelization
-        if nodes[-1].children is None and nodes[-1].v >= EXPAND_VISITS:
-            nodes[-1].expand()
+        node.v += 1  # updating visits on the way down represents "virtual loss", relevant for parallelization
+        if node.children is None and node.v >= EXPAND_VISITS:
+            node.expand()
 
     return nodes
 
@@ -724,7 +703,7 @@ def tree_update(nodes, amaf_map, score, disp=False):
         score = -score
 
 
-pool = None
+worker_pool = None
 
 def tree_search(tree, n, disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
@@ -739,9 +718,9 @@ def tree_search(tree, n, disp=False):
     # maybe more than 90% CPU, especially on larger boards.
 
     n_workers = multiprocessing.cpu_count() if not disp else 1  # set to 1 when debugging
-    global pool
-    if pool is None:
-        pool = Pool(processes=n_workers)
+    global worker_pool
+    if worker_pool is None:
+        worker_pool = Pool(processes=n_workers)
     ongoing = []
     i = 0
     while i < n:
@@ -758,7 +737,7 @@ def tree_search(tree, n, disp=False):
             nodes = tree_descend(tree, amaf_map, disp=disp)
 
             # Issue an mcplayout job to the worker pool
-            ongoing.append((pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
+            ongoing.append((worker_pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
 
         # Any playouts are finished yet?
         for job, nodes in ongoing:
@@ -795,9 +774,16 @@ def str_coord(c):
     return '%c%d' % (colstr[col], N - row)
 
 
+def mcbenchmark(n):
+    """ run n Monte-Carlo playouts from empty position, return avg. score """
+    sumscore = 0
+    for i in range(0, n):
+        sumscore += mcplayout(empty_position(), W*W*[0])[0]
+    return float(sumscore) / n
+
+
 def game_io(computer_black=False):
-    """ A simple UI for playing on the board, no move generation involved;
-    intended for testing. """
+    """ A simple minimalistic text mode UI. """
 
     tree = TreeNode(pos=empty_position())
     tree.expand()
@@ -867,8 +853,8 @@ def gtp_io():
         elif command[0] == "komi":
             # XXX: can we do this nicer?!
             tree.pos = Position(board=tree.pos.board, cap=(tree.pos.cap[0], tree.pos.cap[1]),
-                n=tree.pos.n, ko=tree.pos.ko, last=tree.pos.last, last2=tree.pos.last2,
-                komi=float(command[1]))
+                                n=tree.pos.n, ko=tree.pos.ko, last=tree.pos.last, last2=tree.pos.last2,
+                                komi=float(command[1]))
         elif command[0] == "play":
             c = parse_coord(command[2])
             if c is not None:

@@ -1,8 +1,8 @@
 #!/usr/bin/env pypy
 # -*- coding: utf-8 -*-
 # A minimalistic Go-playing engine attempting to strike a balance between
-# brevity, educational value and strength.  It can beat GNUGo on 9x9 board
-# on a modest 4-thread computer.
+# brevity, educational value and strength.  It can beat GNUGo on 13x13 board
+# on a modest 4-thread laptop.
 
 # FIXME: No superko support.  This is a big bug, of course.
 

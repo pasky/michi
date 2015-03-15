@@ -312,32 +312,38 @@ def empty_position():
 # go heuristics
 
 def fix_atari(board, c, singlept_ok=False):
-    """ Determine whether group at coordinate c is in atari and able
-    to escape it, returning the saving liberty coordinate;
+    """ An atari/capture analysis routine that checks the group at c,
+    determining whether (i) it is in atari (ii) if it can escape it,
+    either by playing on its liberty or counter-capturing another group.
+
+    The return value is a tuple of (boolean, coord), indicating whether
+    the group is in atari and how to escape/capture (or None if impossible).
+
     singlept_ok means that we will not try to save one-point groups (ko) """
+
     fboard = floodfill(board, c)
     if singlept_ok and fboard.count('#') == 1:
-        return None
+        return (False, None)
     # Find a liberty
     l = contact(fboard, '.')
     # Ok, any other liberty?
     fboard = board_put(fboard, l, 'L')
     if contact(fboard, '.') is not None:
-        return None
+        return (False, None)
     # In atari! If it's the opponent's group, that's enough...
     if board[c] == 'x':
-        return l
+        return (True, l)
 
     # We are escaping.  Will playing this liberty gain
     # at least two liberties?  Re-floodfill to account for connecting
     fboard = floodfill(board_put(board, l, 'X'), l)
     l_new = contact(fboard, '.')
     if l_new is None:
-        return None  # oops, suicidal move
+        return (True, None)  # oops, suicidal move
     fboard = board_put(fboard, l_new, 'L')
     # print(str_coord(l_new), fboard, file=sys.stderr)
     if contact(fboard, '.') is not None:
-        return l  # good, there is still some liberty remaining
+        return (True, l)  # good, there is still some liberty remaining
 
     # Playing this liberty won't work, what about counter-capturing
     # a neighboring group?
@@ -345,12 +351,12 @@ def fix_atari(board, c, singlept_ok=False):
         othergroup = contact(fboard, 'x')
         if othergroup is None:
             break
-        l = fix_atari(board, othergroup)
+        a, l = fix_atari(board, othergroup)
         if l is not None:
-            return l
+            return (True, l)
         # XXX: floodfill is better for big groups
         fboard = board_put(fboard, othergroup, '%')
-    return None
+    return (True, None)
 
 
 def cfg_distances(board, c):
@@ -422,7 +428,7 @@ def gen_playout_moves(pos, heuristic_set):
     # print('local moves', [str_coord(c) for c in heuristic_set], file=sys.stderr)
     for c in heuristic_set:
         if pos.board[c] in 'Xx':
-            d = fix_atari(pos.board, c)
+            in_atari, d = fix_atari(pos.board, c)
             if d is not None:
                 yield (d, 'capture')
 
@@ -461,8 +467,8 @@ def mcplayout(pos, amaf_map, disp=False):
             if pos2 is None:
                 continue
             if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
-                atari_fix = fix_atari(pos2.board, c, singlept_ok=True)
-                if atari_fix is not None:
+                in_atari, d = fix_atari(pos2.board, c, singlept_ok=True)
+                if in_atari:
                     if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
                     pos2 = None
                     continue
@@ -533,8 +539,8 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
-            atari_fix = fix_atari(pos2.board, c, singlept_ok=True)
-            if atari_fix is not None:
+            in_atari, d = fix_atari(pos2.board, c, singlept_ok=True)
+            if in_atari:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
 

@@ -426,24 +426,31 @@ def gen_playout_moves(pos, heuristic_set):
     this is the immediate neighborhood of last two moves in the playout, but
     the whole board while prioring the tree. """
 
+    # Remove duplicate suggestions; they mess up both priors and probabalistic
+    # self-atari refusal
+    already_suggested = set()
+
     # Check whether any local group is in atari and fill that liberty
     # print('local moves', [str_coord(c) for c in heuristic_set], file=sys.stderr)
     for c in heuristic_set:
         if pos.board[c] in 'Xx':
             in_atari, d = fix_atari(pos.board, c)
-            if d is not None:
+            if d is not None and d not in already_suggested:
                 yield (d, 'capture')
+                already_suggested.add(d)
 
     # Try to apply a 3x3 pattern on the local neighborhood
     for c in heuristic_set:
-        if pos.board[c] == '.' and neighborhood(pos.board, c) in pat3set:
+        if pos.board[c] == '.' and c not in already_suggested and neighborhood(pos.board, c) in pat3set:
             yield (c, 'pat3')
+            already_suggested.add(c)
 
     # Try *all* available moves, but starting from a random point
     # (in other words, play a random move)
     x, y = random.randint(1, N), random.randint(1, N)
     for c in pos.moves(y*W + x):
-        yield (c, 'random')
+        if c not in already_suggested:
+            yield (c, 'random')
 
 
 def mcplayout(pos, amaf_map, disp=False):

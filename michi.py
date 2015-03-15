@@ -712,40 +712,56 @@ def tree_search(tree, n, disp=False):
         tree.expand()
 
     # We could simply run tree_descend(), mcplayout(), tree_update()
-    # sequentially in a loop.  However, we have an easy (though not optimal)
-    # way to parallelize by distributing the mcplayout() calls to other
-    # processes using the multiprocessing module.  mcplayout() consumes
-    # maybe more than 90% CPU, especially on larger boards.
+    # sequentially in a loop.  This is essentially what the code below
+    # does, if it seems confusing!
+
+    # However, we also have an easy (though not optimal) way to parallelize
+    # by distributing the mcplayout() calls to other processes using the
+    # multiprocessing module.  mcplayout() consumes maybe more than 90% CPU,
+    # especially on larger boards.
 
     n_workers = multiprocessing.cpu_count() if not disp else 1  # set to 1 when debugging
     global worker_pool
     if worker_pool is None:
         worker_pool = Pool(processes=n_workers)
+    outgoing = []
+    incoming = []
     ongoing = []
     i = 0
     while i < n:
+        if not outgoing:
+            # Descend the tree so that we have something ready when a worker
+            # stops being busy
+            amaf_map = W*W*[0]
+            nodes = tree_descend(tree, amaf_map, disp=disp)
+            outgoing.append((nodes, amaf_map))
+
         if len(ongoing) >= n_workers:
             # Too many playouts running? Wait a bit...
-            ongoing[0][0].wait(0.01)
+            ongoing[0][0].wait(0.01 / n_workers)
         else:
             i += 1
             if i > 0 and i % REPORT_PERIOD == 0:
                 print(str_tree_summary(tree, i), file=sys.stderr)
 
-            # Descend the tree
-            amaf_map = W*W*[0]
-            nodes = tree_descend(tree, amaf_map, disp=disp)
-
             # Issue an mcplayout job to the worker pool
+            nodes, amaf_map = outgoing.pop()
             ongoing.append((worker_pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
+
+        # Anything to store in the tree?  (We do this step out-of-order
+        # picking up data from the previous round so that we don't stall
+        # ready workers while we update the tree.)
+        while incoming:
+            score, amaf_map, nodes = incoming.pop()
+            tree_update(nodes, amaf_map, score, disp=disp)
 
         # Any playouts are finished yet?
         for job, nodes in ongoing:
             if not job.ready():
                 continue
-            # Yes! Store it in the tree.
+            # Yes! Queue them up for storing in the tree.
             score, amaf_map = job.get()
-            tree_update(nodes, amaf_map, score, disp=disp)
+            incoming.append((score, amaf_map, nodes))
             ongoing.remove((job, nodes))
 
         # Early stop test

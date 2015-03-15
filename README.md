@@ -35,4 +35,4 @@ Michi is distributed under the MIT licence.  Now go forth, hack and peruse!
 If you want to try it out, just start the script.  You can also pass the
 gtp argument and start it in gogui, or let it play GNUGo:
 
-	gogui/bin/gogui-twogtp -black './michi.py gtp' -white 'gnugo --mode=gtp --chinese-rules --capture-all-dead' -size 9 -verbose -auto
+	gogui/bin/gogui-twogtp -black './michi.py gtp' -white 'gnugo --mode=gtp --chinese-rules --capture-all-dead' -size 9 -komi 7.5 -verbose -auto

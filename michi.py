@@ -37,6 +37,7 @@ PRIOR_SELFATARI = 10  # negative prior
 PRIOR_CAPTURE = 10
 PRIOR_PAT3 = 10
 PRIOR_CFG = [20, 15, 10]  # priors for moves in cfg dist. 1, 2, 3
+PRIOR_EMPTYAREA = 10
 REPORT_PERIOD = 200
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
@@ -382,6 +383,23 @@ def cfg_distances(board, c):
     return cfg_map
 
 
+def line_height(c):
+    """ Return the line number above nearest board edge """
+    row, col = divmod(c - (W+1), W)
+    return min(row, col, N-1-row, N-1-col)
+
+
+def empty_area(board, c, dist=3):
+    """ Check whether there are any stones in Manhattan distance up
+    to 3 """
+    for d in neighbors(c):
+        if board[d] in 'Xx':
+            return False
+        elif board[d] == '.' and dist > 1 and not empty_area(board, d, dist-1):
+            return False
+    return True
+
+
 # pattern routines
 
 def pat_expand(pat):
@@ -554,6 +572,17 @@ class TreeNode():
                 if cfg_map[node.pos.last]-1 < len(PRIOR_CFG):
                     node.pv += PRIOR_CFG[cfg_map[node.pos.last]-1]
                     node.pw += PRIOR_CFG[cfg_map[node.pos.last]-1]
+
+            height = line_height(c)  # 0-index
+            if height <= 2 and empty_area(self.pos.board, c):
+                # No stones around; negative prior for 1st + 2nd line, positive
+                # for 3rd line; sanitizes opening and invasions
+                if height <= 1:
+                    node.pv += PRIOR_EMPTYAREA
+                    node.pw += 0
+                if height == 2:
+                    node.pv += PRIOR_EMPTYAREA
+                    node.pw += PRIOR_EMPTYAREA
 
             in_atari, d = fix_atari(pos2.board, c, singlept_ok=True)
             if in_atari:

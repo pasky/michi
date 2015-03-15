@@ -401,13 +401,15 @@ def cfg_distances(board, c):
     while fringe:
         c = fringe.pop()
         for d in neighbors(c):
-            if board[d].isspace() or cfg_map[d] >= 0:
+            if board[d].isspace() or 0 <= cfg_map[d] <= cfg_map[c]:
                 continue
+            cfg_before = cfg_map[d]
             if board[d] != '.' and board[d] == board[c]:
                 cfg_map[d] = cfg_map[c]
             else:
                 cfg_map[d] = cfg_map[c] + 1
-            fringe.append(d)
+            if cfg_before < 0 or cfg_before > cfg_map[d]:
+                fringe.append(d)
     return cfg_map
 
 

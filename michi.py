@@ -22,7 +22,7 @@ import sys
 # as an (N+1)*(N+2) string, with '.' (empty), 'X' (to-play player),
 # 'x' (other player), and whitespace (off-board border to make rules
 # implementation easier).  Coordinates are just indices in this string.
-N = 9
+N = 13
 W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'

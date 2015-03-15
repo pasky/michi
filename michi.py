@@ -884,19 +884,12 @@ def gtp_io():
         elif command[0] == "play":
             c = parse_coord(command[2])
             if c is not None:
-                # Not a pass
-                if tree.pos.board[c] != '.':
-                    print('Bad move (not empty point)')
-                    continue
-
                 # Find the next node in the game tree and proceed there
-                if tree.children is None:
-                    tree.expand()  # Triggers in case of several plays in row
-                nodes = filter(lambda n: n.pos.last == c, tree.children)
-                if not nodes:
-                    print('Bad move (rule violation)')
-                    continue
-                tree = nodes[0]
+                if tree.children is not None and filter(lambda n: n.pos.last == c, tree.children):
+                    tree = filter(lambda n: n.pos.last == c, tree.children)[0]
+                else:
+                    # Several play commands in row, eye-filling move, etc.
+                    tree = TreeNode(pos=tree.pos.move(c))
 
             else:
                 # Pass move

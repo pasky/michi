@@ -54,6 +54,7 @@ PRIOR_PAT3 = 10
 PRIOR_CFG = [20, 15, 10]  # priors for moves in cfg dist. 1, 2, 3
 PRIOR_EMPTYAREA = 10
 REPORT_PERIOD = 200
+PROB_HEURISTIC = {'capture': 0.9, 'pat3': 0.9}  # probability of heuristic suggestions being taken in playout
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
 RESIGN_THRES = 0.2
@@ -466,7 +467,7 @@ def neighborhood(board, c):
 ###########################
 # montecarlo playout policy
 
-def gen_playout_moves(pos, heuristic_set):
+def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}):
     """ Yield candidate next moves in the order of preference; this is one
     of the main places where heuristics dwell, try adding more!
 
@@ -476,22 +477,24 @@ def gen_playout_moves(pos, heuristic_set):
 
     # Check whether any local group is in atari and fill that liberty
     # print('local moves', [str_coord(c) for c in heuristic_set], file=sys.stderr)
-    already_suggested = set()
-    for c in heuristic_set:
-        if pos.board[c] in 'Xx':
-            in_atari, ds = fix_atari(pos, c)
-            random.shuffle(ds)
-            for d in ds:
-                if d not in already_suggested:
-                    yield (d, 'capture')
-                    already_suggested.add(d)
+    if random.random() <= probs['capture']:
+        already_suggested = set()
+        for c in heuristic_set:
+            if pos.board[c] in 'Xx':
+                in_atari, ds = fix_atari(pos, c)
+                random.shuffle(ds)
+                for d in ds:
+                    if d not in already_suggested:
+                        yield (d, 'capture')
+                        already_suggested.add(d)
 
     # Try to apply a 3x3 pattern on the local neighborhood
-    already_suggested = set()
-    for c in heuristic_set:
-        if pos.board[c] == '.' and c not in already_suggested and neighborhood(pos.board, c) in pat3set:
-            yield (c, 'pat3')
-            already_suggested.add(c)
+    if random.random() <= probs['pat3']:
+        already_suggested = set()
+        for c in heuristic_set:
+            if pos.board[c] == '.' and c not in already_suggested and neighborhood(pos.board, c) in pat3set:
+                yield (c, 'pat3')
+                already_suggested.add(c)
 
     # Try *all* available moves, but starting from a random point
     # (in other words, play a random move)
@@ -513,10 +516,9 @@ def mcplayout(pos, amaf_map, disp=False):
 
         pos2 = None
         # We simply try the moves our heuristics generate, in a particular
-        # order.  This is called "rule-based playouts" and is easier to do,
-        # but the strongest programs use "probability distribution playouts"
-        # which use a more flexible approach to move selection.
-        for c, kind in gen_playout_moves(pos, pos.last_moves_neighbors()):
+        # order, but not with 100% probability; this is on the border between
+        # "rule-based playouts" and "probability distribution playouts".
+        for c, kind in gen_playout_moves(pos, pos.last_moves_neighbors(), PROB_HEURISTIC):
             if disp and kind != 'random':
                 print('move suggestion', str_coord(c), kind, file=sys.stderr)
             pos2 = pos.move(c)

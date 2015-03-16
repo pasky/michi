@@ -332,13 +332,28 @@ def fix_atari(pos, c, singlept_ok=False, twolib_test=True):
     in a ladder - it is not in atari but some capture attack/defense moves
     are available.)
 
-    N.B. this is maybe the most complicated part of the whole program;
+    N.B. this is maybe the most complicated part of the whole program (sadly);
     feel free to just treat it as a black-box, it's not really that
     interesting!
 
     singlept_ok means that we will not try to save one-point groups;
     twolib_test means that we will check for 2-liberty groups which are
     threatened by a ladder """
+
+    def read_ladder_attack(pos, c, l1, l2):
+        """ check if a capturable ladder is being pulled out at c and return
+        a move that continues it in that case; expects its two liberties as
+        l1, l2  (in fact, this is a general 2-lib capture exhaustive solver) """
+        for l in [l1, l2]:
+            pos_l = pos.move(l)
+            if pos_l is None:
+                continue
+            # fix_atari() will recursively call read_ladder_attack() back;
+            # however, ignore 2lib groups as we don't have time to chase them
+            is_atari, atari_escape = fix_atari(pos_l, c, twolib_test=False)
+            if is_atari and not atari_escape:
+                return l
+        return None
 
     fboard = floodfill(pos.board, c)
     group_size = fboard.count('#')
@@ -399,22 +414,6 @@ def fix_atari(pos, c, singlept_ok=False, twolib_test=True):
             solutions.append(l)
 
     return (True, solutions)
-
-
-def read_ladder_attack(pos, c, l1, l2):
-    """ check if a capturable ladder is being pulled out at c and return
-    a move that continues it in that case; expects its two liberties as
-    l1, l2  (in fact, this is a general 2-lib capture exhaustive solver) """
-    for l in [l1, l2]:
-        pos_l = pos.move(l)
-        if pos_l is None:
-            continue
-        # fix_atari() will recursively call read_ladder_attack() back;
-        # however, ignore 2lib groups as we don't have time to chase them
-        is_atari, atari_escape = fix_atari(pos_l, c, twolib_test=False)
-        if is_atari and not atari_escape:
-            return l
-    return None
 
 
 def cfg_distances(board, c):

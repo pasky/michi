@@ -49,7 +49,8 @@ RAVE_EQUIV = 500
 EXPAND_VISITS = 2
 PRIOR_EVEN = 10  # should be even number; 0.5 prior
 PRIOR_SELFATARI = 10  # negative prior
-PRIOR_CAPTURE = 10
+PRIOR_CAPTURE_ONE = 15
+PRIOR_CAPTURE_MANY = 30
 PRIOR_PAT3 = 10
 PRIOR_CFG = [24, 22, 8]  # priors for moves in cfg dist. 1, 2, 3
 PRIOR_EMPTYAREA = 10
@@ -485,7 +486,7 @@ def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}):
                 random.shuffle(ds)
                 for d in ds:
                     if d not in already_suggested:
-                        yield (d, 'capture')
+                        yield (d, 'capture '+str(c))
                         already_suggested.add(d)
 
     # Try to apply a 3x3 pattern on the local neighborhood
@@ -587,9 +588,15 @@ class TreeNode():
                 self.children.append(node)
                 childset[pos2.last] = node
 
-            if kind == 'capture':
-                node.pv += PRIOR_CAPTURE
-                node.pw += PRIOR_CAPTURE
+            if kind.startswith('capture'):
+                # Check how big group we are capturing; coord of the group is
+                # second word in the ``kind`` string
+                if floodfill(self.pos.board, int(kind.split()[1])).count('#') > 1:
+                    node.pv += PRIOR_CAPTURE_MANY
+                    node.pw += PRIOR_CAPTURE_MANY
+                else:
+                    node.pv += PRIOR_CAPTURE_ONE
+                    node.pw += PRIOR_CAPTURE_ONE
             elif kind == 'pat3':
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3

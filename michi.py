@@ -321,25 +321,46 @@ def empty_position():
 ###############
 # go heuristics
 
-def fix_atari(pos, c, singlept_ok=False):
+def fix_atari(pos, c, singlept_ok=False, twolib_test=True):
     """ An atari/capture analysis routine that checks the group at c,
     determining whether (i) it is in atari (ii) if it can escape it,
     either by playing on its liberty or counter-capturing another group.
 
     The return value is a tuple of (boolean, [coord..]), indicating whether
     the group is in atari and how to escape/capture (or [] if impossible).
+    (Note that (False, [...]) is possible in case the group can be captured
+    in a ladder - it is not in atari but some capture attack/defense moves
+    are available.)
 
-    singlept_ok means that we will not try to save one-point groups (ko) """
+    N.B. this is maybe the most complicated part of the whole program;
+    feel free to just treat it as a black-box, it's not really that
+    interesting!
+
+    singlept_ok means that we will not try to save one-point groups;
+    twolib_test means that we will check for 2-liberty groups which are
+    threatened by a ladder """
 
     fboard = floodfill(pos.board, c)
-    if singlept_ok and fboard.count('#') == 1:
+    group_size = fboard.count('#')
+    if singlept_ok and group_size == 1:
         return (False, [])
     # Find a liberty
     l = contact(fboard, '.')
     # Ok, any other liberty?
     fboard = board_put(fboard, l, 'L')
-    if contact(fboard, '.') is not None:
+    l2 = contact(fboard, '.')
+    if l2 is not None:
+        # At least two liberty group...
+        if twolib_test and group_size > 1 and contact(board_put(fboard, l2, 'L'), '.') is None:
+            # Exactly two liberty group with more than one stone.  Check
+            # that it cannot be caught in a working ladder; if it can,
+            # that's as good as in atari, a capture threat.
+            # (Almost - N/A for countercaptures.)
+            ladder_attack = read_ladder_attack(pos, c, l, l2)
+            if ladder_attack:
+                return (False, [ladder_attack])
         return (False, [])
+
     # In atari! If it's the opponent's group, that's enough...
     if pos.board[c] == 'x':
         return (True, [l])
@@ -353,8 +374,8 @@ def fix_atari(pos, c, singlept_ok=False):
         othergroup = contact(ccboard, 'x')
         if othergroup is None:
             break
-        a, ccls = fix_atari(pos, othergroup)
-        if ccls:
+        a, ccls = fix_atari(pos, othergroup, twolib_test=False)
+        if a and ccls:
             solutions += ccls
         # XXX: floodfill is better for big groups
         ccboard = board_put(ccboard, othergroup, '%')
@@ -371,7 +392,10 @@ def fix_atari(pos, c, singlept_ok=False):
     if l_new_2 is not None:
         # Good, there is still some liberty remaining - but if it's
         # just the two, check that we are not caught in a ladder...
-        if contact(board_put(fboard, l_new_2, 'L'), '.') is not None or read_ladder_attack(escpos, l, l_new, l_new_2) is None:
+        # (Except that we don't care if we already have some alternative
+        # escape routes!)
+        if solutions or not (contact(board_put(fboard, l_new_2, 'L'), '.') is None
+                             and read_ladder_attack(escpos, l, l_new, l_new_2) is not None):
             solutions.append(l)
 
     return (True, solutions)
@@ -385,8 +409,9 @@ def read_ladder_attack(pos, c, l1, l2):
         pos_l = pos.move(l)
         if pos_l is None:
             continue
-        # fix_atari() will recursively call read_ladder_attack() back
-        is_atari, atari_escape = fix_atari(pos_l, c)
+        # fix_atari() will recursively call read_ladder_attack() back;
+        # however, ignore 2lib groups as we don't have time to chase them
+        is_atari, atari_escape = fix_atari(pos_l, c, twolib_test=False)
         if is_atari and not atari_escape:
             return l
     return None
@@ -468,7 +493,7 @@ def neighborhood(board, c):
 ###########################
 # montecarlo playout policy
 
-def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}):
+def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}, expensive_ok=False):
     """ Yield candidate next moves in the order of preference; this is one
     of the main places where heuristics dwell, try adding more!
 
@@ -482,7 +507,7 @@ def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}):
         already_suggested = set()
         for c in heuristic_set:
             if pos.board[c] in 'Xx':
-                in_atari, ds = fix_atari(pos, c)
+                in_atari, ds = fix_atari(pos, c, twolib_test=expensive_ok)
                 random.shuffle(ds)
                 for d in ds:
                     if d not in already_suggested:
@@ -527,7 +552,7 @@ def mcplayout(pos, amaf_map, disp=False):
                 continue
             if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
                 in_atari, ds = fix_atari(pos2, c, singlept_ok=True)
-                if in_atari:
+                if ds:
                     if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
                     pos2 = None
                     continue
@@ -575,7 +600,7 @@ class TreeNode():
         # with some priors to bias search towards more sensible moves.
         # Note that there can be many ways to incorporate the priors in
         # next node selection (progressive bias, progressive widening, ...).
-        for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W)):
+        for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W), expensive_ok=True):
             pos2 = self.pos.move(c)
             if pos2 is None:
                 continue
@@ -621,7 +646,7 @@ class TreeNode():
                     node.pw += PRIOR_EMPTYAREA
 
             in_atari, ds = fix_atari(node.pos, c, singlept_ok=True)
-            if in_atari:
+            if ds:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
 

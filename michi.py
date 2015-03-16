@@ -270,7 +270,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             if c is None:  continue
             dlist = [c] + list(neighbors(c) + diag_neighbors(c))
             random.shuffle(dlist)
-            clist += dlist
+            clist += [d for d in dlist if d not in clist]
         return clist
 
     def score(self):

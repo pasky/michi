@@ -321,7 +321,7 @@ def empty_position():
 ###############
 # go heuristics
 
-def fix_atari(pos, c, singlept_ok=False, twolib_test=True):
+def fix_atari(pos, c, singlept_ok=False, twolib_test=True, twolib_edgeonly=False):
     """ An atari/capture analysis routine that checks the group at c,
     determining whether (i) it is in atari (ii) if it can escape it,
     either by playing on its liberty or counter-capturing another group.
@@ -338,7 +338,10 @@ def fix_atari(pos, c, singlept_ok=False, twolib_test=True):
 
     singlept_ok means that we will not try to save one-point groups;
     twolib_test means that we will check for 2-liberty groups which are
-    threatened by a ladder """
+    threatened by a ladder
+    twolib_edgeonly means that we will check the 2-liberty groups only
+    at the board edge, allowing check of the most common short ladders
+    even in the playouts """
 
     def read_ladder_attack(pos, c, l1, l2):
         """ check if a capturable ladder is being pulled out at c and return
@@ -366,7 +369,9 @@ def fix_atari(pos, c, singlept_ok=False, twolib_test=True):
     l2 = contact(fboard, '.')
     if l2 is not None:
         # At least two liberty group...
-        if twolib_test and group_size > 1 and contact(board_put(fboard, l2, 'L'), '.') is None:
+        if twolib_test and group_size > 1 \
+           and (not twolib_edgeonly or line_height(l) == 0 and line_height(l2) == 0) \
+           and contact(board_put(fboard, l2, 'L'), '.') is None:
             # Exactly two liberty group with more than one stone.  Check
             # that it cannot be caught in a working ladder; if it can,
             # that's as good as in atari, a capture threat.
@@ -506,7 +511,7 @@ def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}, expen
         already_suggested = set()
         for c in heuristic_set:
             if pos.board[c] in 'Xx':
-                in_atari, ds = fix_atari(pos, c, twolib_test=expensive_ok)
+                in_atari, ds = fix_atari(pos, c, twolib_edgeonly=not expensive_ok)
                 random.shuffle(ds)
                 for d in ds:
                     if d not in already_suggested:
@@ -550,7 +555,7 @@ def mcplayout(pos, amaf_map, disp=False):
             if pos2 is None:
                 continue
             if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
-                in_atari, ds = fix_atari(pos2, c, singlept_ok=True)
+                in_atari, ds = fix_atari(pos2, c, singlept_ok=True, twolib_edgeonly=True)
                 if ds:
                     if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
                     pos2 = None

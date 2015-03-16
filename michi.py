@@ -741,7 +741,7 @@ def tree_search(tree, n, disp=False):
     ongoing = []
     i = 0
     while i < n:
-        if not outgoing:
+        if not outgoing and not (disp and ongoing):
             # Descend the tree so that we have something ready when a worker
             # stops being busy
             amaf_map = W*W*[0]

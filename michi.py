@@ -45,13 +45,13 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 2000
-RAVE_EQUIV = 3000
+RAVE_EQUIV = 500
 EXPAND_VISITS = 2
-PRIOR_EVEN = 6  # should be even number; 0.5 prior
+PRIOR_EVEN = 10  # should be even number; 0.5 prior
 PRIOR_SELFATARI = 10  # negative prior
 PRIOR_CAPTURE = 10
 PRIOR_PAT3 = 10
-PRIOR_CFG = [20, 15, 10]  # priors for moves in cfg dist. 1, 2, 3
+PRIOR_CFG = [24, 22, 8]  # priors for moves in cfg dist. 1, 2, 3
 PRIOR_EMPTYAREA = 10
 REPORT_PERIOD = 200
 PROB_HEURISTIC = {'capture': 0.9, 'pat3': 0.9}  # probability of heuristic suggestions being taken in playout

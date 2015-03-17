@@ -24,6 +24,13 @@ gtp argument and start it in gogui, or let it play GNUGo:
 
 	gogui/bin/gogui-twogtp -black './michi.py gtp' -white 'gnugo --mode=gtp --chinese-rules --capture-all-dead' -size 9 -komi 7.5 -verbose -auto
 
+It is *highly* recommended that you download Pachi large-scale pattern files
+(patterns.prob, patterns.spat):
+
+	http://pachi.or.cz/pat/gogod-handikgspachi/
+
+Store them in the current directory for Michi to find.
+
 Understanding and Hacking
 -------------------------
 

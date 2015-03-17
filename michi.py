@@ -26,6 +26,7 @@
 from __future__ import print_function
 from collections import namedtuple
 from itertools import count
+import math
 import multiprocessing
 from multiprocessing.pool import Pool
 import random
@@ -44,14 +45,15 @@ empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
-N_SIMS = 2000
+N_SIMS = 1400
 RAVE_EQUIV = 500
-EXPAND_VISITS = 2
+EXPAND_VISITS = 5
 PRIOR_EVEN = 10  # should be even number; 0.5 prior
 PRIOR_SELFATARI = 10  # negative prior
 PRIOR_CAPTURE_ONE = 15
 PRIOR_CAPTURE_MANY = 30
 PRIOR_PAT3 = 10
+PRIOR_LARGEPATTERN = 100  # most moves have relatively small probability
 PRIOR_CFG = [24, 22, 8]  # priors for moves in cfg dist. 1, 2, 3
 PRIOR_EMPTYAREA = 10
 REPORT_PERIOD = 200
@@ -106,6 +108,27 @@ pat3src = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
         "X.O",
         "   "],
        ]
+
+pat_gridcular_seq = [  # Sequence of coordinate offsets of progressively wider diameters in gridcular metric
+        [[0,0],
+         [0,1], [0,-1], [1,0], [-1,0],
+         [1,1], [-1,1], [1,-1], [-1,-1], ],  # d=1,2 is not considered separately
+        [[0,2], [0,-2], [2,0], [-2,0], ],
+        [[1,2], [-1,2], [1,-2], [-1,-2], [2,1], [-2,1], [2,-1], [-2,-1], ],
+        [[0,3], [0,-3], [2,2], [-2,2], [2,-2], [-2,-2], [3,0], [-3,0], ],
+        [[1,3], [-1,3], [1,-3], [-1,-3], [3,1], [-3,1], [3,-1], [-3,-1], ],
+        [[0,4], [0,-4], [2,3], [-2,3], [2,-3], [-2,-3], [3,2], [-3,2], [3,-2], [-3,-2], [4,0], [-4,0], ],
+        [[1,4], [-1,4], [1,-4], [-1,-4], [3,3], [-3,3], [3,-3], [-3,-3], [4,1], [-4,1], [4,-1], [-4,-1], ],
+        # Disable d=10 and further as a speed compromise...
+        # (also disabled in load_spat_patterndict())
+        # [[0,5], [0,-5], [2,4], [-2,4], [2,-4], [-2,-4], [4,2], [-4,2], [4,-2], [-4,-2], [5,0], [-5,0], ],
+        # [[1,5], [-1,5], [1,-5], [-1,-5], [3,4], [-3,4], [3,-4], [-3,-4], [4,3], [-4,3], [4,-3], [-4,-3], [5,1], [-5,1], [5,-1], [-5,-1], ],
+        # [[0,6], [0,-6], [2,5], [-2,5], [2,-5], [-2,-5], [4,4], [-4,4], [4,-4], [-4,-4], [5,2], [-5,2], [5,-2], [-5,-2], [6,0], [-6,0], ],
+        # [[1,6], [-1,6], [1,-6], [-1,-6], [3,5], [-3,5], [3,-5], [-3,-5], [5,3], [-5,3], [5,-3], [-5,-3], [6,1], [-6,1], [6,-1], [-6,-1], ],
+        # [[0,7], [0,-7], [2,6], [-2,6], [2,-6], [-2,-6], [4,5], [-4,5], [4,-5], [-4,-5], [5,4], [-5,4], [5,-4], [-5,-4], [6,2], [-6,2], [6,-2], [-6,-2], [7,0], [-7,0], ],
+    ]
+spat_patterndict_file = 'patterns.spat'
+large_patterns_file = 'patterns.prob'
 
 
 #######################
@@ -494,6 +517,76 @@ def neighborhood_33(board, c):
     return (board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]).replace('\n', ' ')
 
 
+spat_patterndict = dict()  # hash(neighborhood_gridcular()) -> spatial id
+def load_spat_patterndict(f):
+    global spat_patterndict
+    for line in f:
+        # line: 71 6 ..X.X..OO.O..........#X...... 33408f5e 188e9d3e 2166befe aa8ac9e 127e583e 1282462e 5e3d7fe 51fc9ee
+        if line.startswith('#') or int(line.split()[1]) >= 10:
+            continue
+        neighborhood = line.split()[2].replace('#', ' ').replace('O', 'x')
+        spat_patterndict[hash(neighborhood)] = int(line.split()[0])
+
+large_patterns = dict()  # spatial id -> probability
+def load_large_patterns(f):
+    # The pattern file contains other features like capture, selfatari too;
+    # we ignore them for now
+    global large_patterns
+    for line in f:
+        # line: 0.004 14 3842 (capture:17 border:0 s:784)
+        p = float(line.split()[0])
+        m = re.search('s:(\d+)', line)
+        if m is not None:
+            s = int(m.groups()[0])
+            large_patterns[s] = p
+
+
+def neighborhood_gridcular(board, c):
+    """ Yield progressively wider-diameter gridcular board neighborhood
+    stone configuration strings, all possible rotations """
+    # Each rotations element is (xyindex, xymultiplier, swapcolors)
+    rotations = [((0,1),(1,1),False), ((0,1),(-1,1),False), ((0,1),(1,-1),False), ((0,1),(-1,-1),False),
+                 ((1,0),(1,1),False), ((1,0),(-1,1),False), ((1,0),(1,-1),False), ((1,0),(-1,-1),False),
+                 ((0,1),(1,1), True), ((0,1),(-1,1), True), ((0,1),(1,-1), True), ((0,1),(-1,-1), True),
+                 ((1,0),(1,1), True), ((1,0),(-1,1), True), ((1,0),(1,-1), True), ((1,0),(-1,-1), True)]
+    neighborhood = ['' for i in range(len(rotations))]
+    for dseq in pat_gridcular_seq:
+        for ri in range(len(rotations)):
+            r = rotations[ri]
+            for o in dseq:
+                y, x = divmod(c - (W+1), W)
+                y += o[r[0][0]]*r[1][0]
+                x += o[r[0][1]]*r[1][1]
+                if y >= 0 and y < N and x >= 0 and x < N:
+                    neighborhood[ri] += board[(y+1)*W + x+1]
+                else:
+                    neighborhood[ri] += ' '
+            if not r[2]:
+                yield neighborhood[ri].replace('\n', ' ')
+            else:
+                yield neighborhood[ri].replace('\n', ' ').swapcase()
+
+
+def large_pattern_probability(board, c):
+    """ return probability of large-scale pattern at coordinate c """
+    probability = None
+    matched_len = 0
+    non_matched_len = 0
+    for n in neighborhood_gridcular(board, c):
+        sp_i = spat_patterndict.get(hash(n))
+        prob = large_patterns.get(sp_i) if sp_i is not None else None
+        if prob is not None:
+            probability = prob
+            matched_len = len(n)
+        elif matched_len < non_matched_len < len(n):
+            # stop when we did not match any pattern with a certain
+            # diameter - it ain't going to get any better!
+            break
+        else:
+            non_matched_len = len(n)
+    return probability
+
+
 ###########################
 # montecarlo playout policy
 
@@ -630,6 +723,13 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
+        # Now, match large patterns for all children and build a probability
+        # distribution
+        patternprob_map = W*W*[None]
+        if spat_patterndict:
+            for node in self.children:
+                patternprob_map[node.pos.last] = large_pattern_probability(self.pos.board, node.pos.last)
+
         # Second pass setting priors, considering each move just once now
         for node in self.children:
             c = node.pos.last
@@ -653,6 +753,11 @@ class TreeNode():
             if ds:
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
+
+            if patternprob_map[c] is not None and patternprob_map[c] > 0.001:
+                pattern_prior = math.sqrt(patternprob_map[c])  # tone up
+                node.pv += pattern_prior * PRIOR_LARGEPATTERN
+                node.pw += pattern_prior * PRIOR_LARGEPATTERN
 
         if not self.children:
             # No possible moves, add a pass move
@@ -976,6 +1081,16 @@ def gtp_io():
 
 
 if __name__ == "__main__":
+    try:
+        with open(spat_patterndict_file) as f:
+            print('Loading pattern spatial dictionary...', file=sys.stderr)
+            load_spat_patterndict(f)
+        with open(large_patterns_file) as f:
+            print('Loading large patterns...', file=sys.stderr)
+            load_large_patterns(f)
+        print('Done.', file=sys.stderr)
+    except IOError as e:
+        print('Warning: Cannot load pattern files: %s; will be much weaker, consider lowering EXPAND_VISITS 5->2' % (e,), file=sys.stderr)
     if len(sys.argv) < 2:
         # Default action
         game_io()

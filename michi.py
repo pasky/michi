@@ -62,7 +62,7 @@ RESIGN_THRES = 0.2
 FASTPLAY20_THRES = 0.8  # if at 20% playouts winrate is >this, stop reading
 FASTPLAY5_THRES = 0.95  # if at 5% playouts winrate is >this, stop reading
 
-patternsrc = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
+pat3src = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
        ["XOX",  # hane pattern - enclosing hane
         "...",
         "???"],
@@ -461,9 +461,9 @@ def empty_area(board, c, dist=3):
     return True
 
 
-# pattern routines
+# 3x3 pattern routines
 
-def pat_expand(pat):
+def pat3_expand(pat):
     """ All possible neighborhood configurations matching a given pattern """
     def pat_rot90(p):
         return [p[2][0] + p[1][0] + p[0][0], p[2][1] + p[1][1] + p[0][1], p[2][2] + p[1][2] + p[0][2]]
@@ -488,9 +488,9 @@ def pat_expand(pat):
               for p in [p, pat_swapcolors(p)]
               for p in pat_wildcards(''.join(p))]
 
-pat3set = set([p.replace('O', 'x') for p in patternsrc for p in pat_expand(p)])
+pat3set = set([p.replace('O', 'x') for p in pat3src for p in pat3_expand(p)])
 
-def neighborhood(board, c):
+def neighborhood_33(board, c):
     return (board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]).replace('\n', ' ')
 
 
@@ -522,7 +522,7 @@ def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}, expen
     if random.random() <= probs['pat3']:
         already_suggested = set()
         for c in heuristic_set:
-            if pos.board[c] == '.' and c not in already_suggested and neighborhood(pos.board, c) in pat3set:
+            if pos.board[c] == '.' and c not in already_suggested and neighborhood_33(pos.board, c) in pat3set:
                 yield (c, 'pat3')
                 already_suggested.add(c)
 

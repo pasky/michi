@@ -297,9 +297,11 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             clist += [d for d in dlist if d not in clist]
         return clist
 
-    def score(self):
+    def score(self, owner_map=None):
         """ compute score for to-play player; this assumes a final position
-        with all dead stones captured"""
+        with all dead stones captured; if owner_map is passed, it is assumed
+        to be an array of statistics with average owner at the end of the game
+        (+1 black, -1 white) """
         board = self.board
         i = 0
         while True:
@@ -316,9 +318,13 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             else:
                 board = fboard.replace('#', ':')  # seki, rare
         komi = self.komi if self.n % 2 == 1 else -self.komi
+        if owner_map is not None:
+            for c in range(W*W):
+                n = 1 if board[c] == 'X' else -1 if board[c] == 'x' else 0
+                owner_map[c] += n * (1 if self.n % 2 == 0 else -1)
         return board.count('X') - board.count('x') + komi
 
-    def print_board(self, f=sys.stderr):
+    def print_board(self, f=sys.stderr, owner_map=None):
         if self.n % 2 == 0:  # to-play is black
             board = self.board.replace('x', 'O')
             Xcap, Ocap = self.cap
@@ -326,12 +332,29 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             board = self.board.replace('X', 'O').replace('x', 'X')
             Ocap, Xcap = self.cap
         print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi), file=f)
-        pretty_board = ' '.join(board.rstrip())
+        pretty_board = ' '.join(board.rstrip()) + ' '
         if self.last is not None:
             pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
         rowcounter = count()
-        pretty_board = "\n".join([' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)])
-        print(pretty_board, file=f)
+        pretty_board = [' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)]
+        if owner_map is not None:
+            pretty_ownermap = ''
+            for c in range(W*W):
+                if board[c].isspace():
+                    pretty_ownermap += board[c]
+                elif owner_map[c] > 0.6:
+                    pretty_ownermap += 'X'
+                elif owner_map[c] > 0.3:
+                    pretty_ownermap += 'x'
+                elif owner_map[c] < -0.6:
+                    pretty_ownermap += 'O'
+                elif owner_map[c] < -0.3:
+                    pretty_ownermap += 'o'
+                else:
+                    pretty_ownermap += '.'
+            pretty_ownermap = ' '.join(pretty_ownermap.rstrip())
+            pretty_board = ['%s   %s' % (brow, orow[2:]) for brow, orow in zip(pretty_board, pretty_ownermap.split("\n")[1:])]
+        print("\n".join(pretty_board), file=f)
         print('    ' + ' '.join(colstr[:N]), file=f)
         print('', file=f)
 
@@ -658,11 +681,12 @@ def mcplayout(pos, amaf_map, disp=False):
             continue
         passes = 0
         pos = pos2
-    score = pos.score()
+    owner_map = W*W*[0]
+    score = pos.score(owner_map)
     if disp:  print('** SCORE B%+.1f **' % (score if pos.n % 2 == 0 else -score), file=sys.stderr)
     if start_n % 2 != pos.n % 2:
         score = -score
-    return score, amaf_map
+    return score, amaf_map, owner_map
 
 
 ########################
@@ -854,7 +878,7 @@ def tree_update(nodes, amaf_map, score, disp=False):
 
 worker_pool = None
 
-def tree_search(tree, n, disp=False):
+def tree_search(tree, n, owner_map, disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
     # Initialize root node
     if tree.children is None:
@@ -901,16 +925,18 @@ def tree_search(tree, n, disp=False):
         # picking up data from the previous round so that we don't stall
         # ready workers while we update the tree.)
         while incoming:
-            score, amaf_map, nodes = incoming.pop()
+            score, amaf_map, owner_map_one, nodes = incoming.pop()
             tree_update(nodes, amaf_map, score, disp=disp)
+            for c in range(W*W):
+                owner_map[c] += owner_map_one[c]
 
         # Any playouts are finished yet?
         for job, nodes in ongoing:
             if not job.ready():
                 continue
             # Yes! Queue them up for storing in the tree.
-            score, amaf_map = job.get()
-            incoming.append((score, amaf_map, nodes))
+            score, amaf_map, owner_map_one = job.get()
+            incoming.append((score, amaf_map, owner_map_one, nodes))
             ongoing.remove((job, nodes))
 
         # Early stop test
@@ -918,6 +944,8 @@ def tree_search(tree, n, disp=False):
         if i > n*0.05 and best_wr > FASTPLAY5_THRES or i > n*0.2 and best_wr > FASTPLAY20_THRES:
             break
 
+    for c in range(W*W):
+        owner_map[c] = float(owner_map[c]) / i
     tree.dump_subtree()
     print(str_tree_summary(tree, i), file=sys.stderr)
     return tree.best_move()
@@ -952,9 +980,10 @@ def game_io(computer_black=False):
 
     tree = TreeNode(pos=empty_position())
     tree.expand()
+    owner_map = W*W*[0]
     while True:
         if not (tree.pos.n == 0 and computer_black):
-            tree.pos.print_board(sys.stdout)
+            tree.pos.print_board(sys.stdout, owner_map)
 
             sc = raw_input("Your move: ")
             c = parse_coord(sc)
@@ -980,7 +1009,8 @@ def game_io(computer_black=False):
 
             tree.pos.print_board()
 
-        tree = tree_search(tree, N_SIMS)
+        owner_map = W*W*[0]
+        tree = tree_search(tree, N_SIMS, owner_map)
         if tree.pos.last is None and tree.pos.last2 is None:
             score = tree.pos.score()
             if tree.pos.n % 2:
@@ -1008,6 +1038,7 @@ def gtp_io():
             command = command[1:]
         else:
             cmdid = ''
+        owner_map = W*W*[0]
         ret = ''
         if command[0] == "boardsize":
             if int(command[1]) != N:
@@ -1037,7 +1068,7 @@ def gtp_io():
                 else:
                     tree = TreeNode(pos=tree.pos.pass_move())
         elif command[0] == "genmove":
-            tree = tree_search(tree, N_SIMS)
+            tree = tree_search(tree, N_SIMS, owner_map)
             if tree.pos.last is None and tree.pos.last2 is None:
                 ret = 'pass'
             elif float(tree.w)/tree.v < RESIGN_THRES:
@@ -1059,7 +1090,7 @@ def gtp_io():
         elif command[0] == "version":
             ret = 'simple go program demo'
         elif command[0] == "tsdebug":
-            tree_search(tree, N_SIMS, disp=True).pos.print_board()
+            tree_search(tree, N_SIMS, W*W*[0], disp=True).pos.print_board()
         elif command[0] == "list_commands":
             ret = '\n'.join(['boardsize', 'clear_board', 'komi', 'play', 'genmove', 'final_score', 'name', 'version', 'list_commands', 'ts_debug'])
         elif command[0] == "protocol_version":
@@ -1068,7 +1099,7 @@ def gtp_io():
             print('Warning: Ignoring unknown command - %s' % (line,), file=sys.stderr)
             ret = None
 
-        tree.pos.print_board(sys.stderr)
+        tree.pos.print_board(sys.stderr, owner_map)
         if ret is not None:
             print('=%s %s\n\n' % (cmdid, ret,), end='')
         else:
@@ -1099,8 +1130,8 @@ if __name__ == "__main__":
     elif sys.argv[1] == "mcbenchmark":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
-        tree_search(TreeNode(pos=empty_position()), N_SIMS, disp=False).pos.print_board()
+        tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=False).pos.print_board()
     elif sys.argv[1] == "tsdebug":
-        tree_search(TreeNode(pos=empty_position()), N_SIMS, disp=True).pos.print_board()
+        tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=True).pos.print_board()
     else:
         print('Unknown action', file=sys.stderr)

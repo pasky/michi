@@ -544,12 +544,11 @@ def load_large_patterns(f):
 def neighborhood_gridcular(board, c):
     """ Yield progressively wider-diameter gridcular board neighborhood
     stone configuration strings, all possible rotations """
-    # Each rotations element is (xyindex, xymultiplier, swapcolors)
-    rotations = [((0,1),(1,1),False), ((0,1),(-1,1),False), ((0,1),(1,-1),False), ((0,1),(-1,-1),False),
-                 ((1,0),(1,1),False), ((1,0),(-1,1),False), ((1,0),(1,-1),False), ((1,0),(-1,-1),False),
-                 ((0,1),(1,1), True), ((0,1),(-1,1), True), ((0,1),(1,-1), True), ((0,1),(-1,-1), True),
-                 ((1,0),(1,1), True), ((1,0),(-1,1), True), ((1,0),(1,-1), True), ((1,0),(-1,-1), True)]
+    # Each rotations element is (xyindex, xymultiplier)
+    rotations = [((0,1),(1,1)), ((0,1),(-1,1)), ((0,1),(1,-1)), ((0,1),(-1,-1)),
+                 ((1,0),(1,1)), ((1,0),(-1,1)), ((1,0),(1,-1)), ((1,0),(-1,-1))]
     neighborhood = ['' for i in range(len(rotations))]
+    wboard = board.replace('\n', ' ')
     for dseq in pat_gridcular_seq:
         for ri in range(len(rotations)):
             r = rotations[ri]
@@ -558,13 +557,10 @@ def neighborhood_gridcular(board, c):
                 y += o[r[0][0]]*r[1][0]
                 x += o[r[0][1]]*r[1][1]
                 if y >= 0 and y < N and x >= 0 and x < N:
-                    neighborhood[ri] += board[(y+1)*W + x+1]
+                    neighborhood[ri] += wboard[(y+1)*W + x+1]
                 else:
                     neighborhood[ri] += ' '
-            if not r[2]:
-                yield neighborhood[ri].replace('\n', ' ')
-            else:
-                yield neighborhood[ri].replace('\n', ' ').swapcase()
+            yield neighborhood[ri]
 
 
 def large_pattern_probability(board, c):

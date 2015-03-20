@@ -10,9 +10,15 @@ etc.
 
 Our target size is under 500 lines of code (without user interface, tables
 and empty lines / comments).  Currently, it can often win against GNUGo
-on 9x9 on an old i3 4-thread notebook.  This is not meant to be a competitive
-engine; simplicity and clear code is preferred over optimization (after all,
-it's in Python!).
+on 9x9 on an old i3 4-thread notebook, be about even with GNUGo on 15x15
+on a modern higher end computer and about two stones weaker on 19x19
+(spending no more than 30s per move).
+
+This is not meant to be a competitive engine; simplicity and clear code is
+preferred over optimization (after all, it's in Python!).  But compared to
+other minimalistic engines, this one should be able to beat beginner
+intermediate human players, and I believe that a *fast* implementation
+of exactly the same heuristics would be around 4k KGS or even better.
 
 Michi is distributed under the MIT licence.  Now go forth, hack and peruse!
 
@@ -24,12 +30,12 @@ gtp argument and start it in gogui, or let it play GNUGo:
 
 	gogui/bin/gogui-twogtp -black './michi.py gtp' -white 'gnugo --mode=gtp --chinese-rules --capture-all-dead' -size 9 -komi 7.5 -verbose -auto
 
-It is *highly* recommended that you download Pachi large-scale pattern files
+It is *highly* recommended that you download Michi large-scale pattern files
 (patterns.prob, patterns.spat):
 
-	http://pachi.or.cz/pat/gogod-handikgspachi/
+	http://pachi.or.cz/michi-pat/
 
-Store them in the current directory for Michi to find.
+Store and unpack them in the current directory for Michi to find.
 
 Understanding and Hacking
 -------------------------
@@ -68,11 +74,14 @@ or could contain, roughly in order of priority:
 
   * Superko support.
   * Support for early passing and GTP stone status protocol.
-  * Simple time management.
   * gogui visualization support.
   * Group/liberty tracking in the board position implementation.
+  * Two or more liberty semeai reading in playouts.
+  * Simple time management.
   * Probability distribution playouts.
-  * Some popular variant of the last-good-reply policy.
-  * Most crucial heuristics: Better ko fight support, throwin detection,
-    nakade support, ...
-  * Diminishing RAVE by origin move number and other fancy algorithmics.
+  * Tune parameters using CLOP.
+
+(One of the things I would hope to inspire is rewrite of the same
+algorithm in different, faster programming languages - hopefully seeing
+a done real-world thing is easier than developing it from scratch.  What
+about a Go engine in the Go language?)

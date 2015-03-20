@@ -322,40 +322,6 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
                 owner_map[c] += n * (1 if self.n % 2 == 0 else -1)
         return board.count('X') - board.count('x') + komi
 
-    def print_board(self, f=sys.stderr, owner_map=None):
-        if self.n % 2 == 0:  # to-play is black
-            board = self.board.replace('x', 'O')
-            Xcap, Ocap = self.cap
-        else:  # to-play is white
-            board = self.board.replace('X', 'O').replace('x', 'X')
-            Ocap, Xcap = self.cap
-        print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (self.n, Xcap, Ocap, self.komi), file=f)
-        pretty_board = ' '.join(board.rstrip()) + ' '
-        if self.last is not None:
-            pretty_board = pretty_board[:self.last*2-1] + '(' + board[self.last] + ')' + pretty_board[self.last*2+2:]
-        rowcounter = count()
-        pretty_board = [' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)]
-        if owner_map is not None:
-            pretty_ownermap = ''
-            for c in range(W*W):
-                if board[c].isspace():
-                    pretty_ownermap += board[c]
-                elif owner_map[c] > 0.6:
-                    pretty_ownermap += 'X'
-                elif owner_map[c] > 0.3:
-                    pretty_ownermap += 'x'
-                elif owner_map[c] < -0.6:
-                    pretty_ownermap += 'O'
-                elif owner_map[c] < -0.3:
-                    pretty_ownermap += 'o'
-                else:
-                    pretty_ownermap += '.'
-            pretty_ownermap = ' '.join(pretty_ownermap.rstrip())
-            pretty_board = ['%s   %s' % (brow, orow[2:]) for brow, orow in zip(pretty_board, pretty_ownermap.split("\n")[1:])]
-        print("\n".join(pretty_board), file=f)
-        print('    ' + ' '.join(colstr[:N]), file=f)
-        print('', file=f)
-
 
 def empty_position():
     """ Return an initial board position """
@@ -652,7 +618,7 @@ def mcplayout(pos, amaf_map, disp=False):
     start_n = pos.n
     passes = 0
     while passes < 2 and pos.n < MAX_GAME_LEN:
-        if disp:  pos.print_board()
+        if disp:  print_pos(pos)
 
         pos2 = None
         # We simply try the moves our heuristics generate, in a particular
@@ -829,7 +795,7 @@ def tree_descend(tree, amaf_map, disp=False):
     nodes = [tree]
     passes = 0
     while nodes[-1].children is not None and passes < 2:
-        if disp:  nodes[-1].pos.print_board()
+        if disp:  print_pos(nodes[-1].pos)
 
         # Pick the most urgent child
         children = list(nodes[-1].children)
@@ -952,6 +918,44 @@ def tree_search(tree, n, owner_map, disp=False):
 ###################
 # user interface(s)
 
+def print_pos(pos, f=sys.stderr, owner_map=None):
+    """ print visualization of the given board position, optionally also
+    including an owner map statistic (probability of that area of board
+    eventually becoming black/white) """
+    if pos.n % 2 == 0:  # to-play is black
+        board = pos.board.replace('x', 'O')
+        Xcap, Ocap = pos.cap
+    else:  # to-play is white
+        board = pos.board.replace('X', 'O').replace('x', 'X')
+        Ocap, Xcap = pos.cap
+    print('Move: %-3d   Black: %d caps   White: %d caps  Komi: %.1f' % (pos.n, Xcap, Ocap, pos.komi), file=f)
+    pretty_board = ' '.join(board.rstrip()) + ' '
+    if pos.last is not None:
+        pretty_board = pretty_board[:pos.last*2-1] + '(' + board[pos.last] + ')' + pretty_board[pos.last*2+2:]
+    rowcounter = count()
+    pretty_board = [' %-02d%s' % (N-i, row[2:]) for row, i in zip(pretty_board.split("\n")[1:], rowcounter)]
+    if owner_map is not None:
+        pretty_ownermap = ''
+        for c in range(W*W):
+            if board[c].isspace():
+                pretty_ownermap += board[c]
+            elif owner_map[c] > 0.6:
+                pretty_ownermap += 'X'
+            elif owner_map[c] > 0.3:
+                pretty_ownermap += 'x'
+            elif owner_map[c] < -0.6:
+                pretty_ownermap += 'O'
+            elif owner_map[c] < -0.3:
+                pretty_ownermap += 'o'
+            else:
+                pretty_ownermap += '.'
+        pretty_ownermap = ' '.join(pretty_ownermap.rstrip())
+        pretty_board = ['%s   %s' % (brow, orow[2:]) for brow, orow in zip(pretty_board, pretty_ownermap.split("\n")[1:])]
+    print("\n".join(pretty_board), file=f)
+    print('    ' + ' '.join(colstr[:N]), file=f)
+    print('', file=f)
+
+
 def parse_coord(s):
     if s == 'pass':
         return None
@@ -981,7 +985,7 @@ def game_io(computer_black=False):
     owner_map = W*W*[0]
     while True:
         if not (tree.pos.n == 0 and computer_black):
-            tree.pos.print_board(sys.stdout, owner_map)
+            print_pos(tree.pos, sys.stdout, owner_map)
 
             sc = raw_input("Your move: ")
             c = parse_coord(sc)
@@ -1005,7 +1009,7 @@ def game_io(computer_black=False):
                 else:
                     tree = TreeNode(pos=tree.pos.pass_move())
 
-            tree.pos.print_board()
+            print_pos(tree.pos)
 
         owner_map = W*W*[0]
         tree = tree_search(tree, N_SIMS, owner_map)
@@ -1088,7 +1092,7 @@ def gtp_io():
         elif command[0] == "version":
             ret = 'simple go program demo'
         elif command[0] == "tsdebug":
-            tree_search(tree, N_SIMS, W*W*[0], disp=True).pos.print_board()
+            print_pos(tree_search(tree, N_SIMS, W*W*[0], disp=True))
         elif command[0] == "list_commands":
             ret = '\n'.join(['boardsize', 'clear_board', 'komi', 'play', 'genmove', 'final_score', 'name', 'version', 'list_commands', 'ts_debug'])
         elif command[0] == "protocol_version":
@@ -1097,7 +1101,7 @@ def gtp_io():
             print('Warning: Ignoring unknown command - %s' % (line,), file=sys.stderr)
             ret = None
 
-        tree.pos.print_board(sys.stderr, owner_map)
+        print_pos(tree.pos, sys.stderr, owner_map)
         if ret is not None:
             print('=%s %s\n\n' % (cmdid, ret,), end='')
         else:
@@ -1128,8 +1132,8 @@ if __name__ == "__main__":
     elif sys.argv[1] == "mcbenchmark":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
-        tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=False).pos.print_board()
+        print_pos(tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=False).pos)
     elif sys.argv[1] == "tsdebug":
-        tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=True).pos.print_board()
+        print_pos(tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=True).pos)
     else:
         print('Unknown action', file=sys.stderr)

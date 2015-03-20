@@ -763,31 +763,6 @@ class TreeNode():
         """ best move is the most simulated one """
         return max(self.children, key=lambda node: node.v) if self.children is not None else None
 
-    def dump_subtree(self, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
-        """ print this node and all its children with v >= thres. """
-        print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, urgency %.3f)" %
-              (indent*' ', str_coord(self.pos.last), self.winrate(),
-               self.w, self.v, self.pw, self.pv, self.aw, self.av,
-               float(self.aw)/self.av if self.av > 0 else float('nan'),
-               self.rave_urgency()), file=f)
-        if not recurse:
-            return
-        for child in sorted(self.children, key=lambda n: n.v, reverse=True):
-            if child.v >= thres:
-                child.dump_subtree(thres=thres, indent=indent+3, f=f)
-
-
-def str_tree_summary(tree, sims):
-    best_nodes = sorted(tree.children, key=lambda n: n.v, reverse=True)[:5]
-    best_seq = []
-    node = tree
-    while node is not None:
-        best_seq.append(node.pos.last)
-        node = node.best_move()
-    return ('[%4d] winrate %.3f | seq %s | can %s' %
-            (sims, best_nodes[0].winrate(), ' '.join([str_coord(c) for c in best_seq[1:6]]),
-             ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes])))
-
 
 def tree_descend(tree, amaf_map, disp=False):
     """ Descend through the tree to a leaf """
@@ -801,7 +776,7 @@ def tree_descend(tree, amaf_map, disp=False):
         children = list(nodes[-1].children)
         if disp:
             for c in children:
-                c.dump_subtree(recurse=False)
+                dump_subtree(c, recurse=False)
         random.shuffle(children)  # randomize the max in case of equal urgency
         node = max(children, key=lambda node: node.rave_urgency())
         nodes.append(node)
@@ -879,7 +854,7 @@ def tree_search(tree, n, owner_map, disp=False):
         else:
             i += 1
             if i > 0 and i % REPORT_PERIOD == 0:
-                print(str_tree_summary(tree, i), file=sys.stderr)
+                print_tree_summary(tree, i, f=sys.stderr)
 
             # Issue an mcplayout job to the worker pool
             nodes, amaf_map = outgoing.pop()
@@ -910,8 +885,8 @@ def tree_search(tree, n, owner_map, disp=False):
 
     for c in range(W*W):
         owner_map[c] = float(owner_map[c]) / i
-    tree.dump_subtree()
-    print(str_tree_summary(tree, i), file=sys.stderr)
+    dump_subtree(tree)
+    print_tree_summary(tree, i, f=sys.stderr)
     return tree.best_move()
 
 
@@ -954,6 +929,32 @@ def print_pos(pos, f=sys.stderr, owner_map=None):
     print("\n".join(pretty_board), file=f)
     print('    ' + ' '.join(colstr[:N]), file=f)
     print('', file=f)
+
+
+def dump_subtree(node, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
+    """ print this node and all its children with v >= thres. """
+    print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, urgency %.3f)" %
+          (indent*' ', str_coord(node.pos.last), node.winrate(),
+           node.w, node.v, node.pw, node.pv, node.aw, node.av,
+           float(node.aw)/node.av if node.av > 0 else float('nan'),
+           node.rave_urgency()), file=f)
+    if not recurse:
+        return
+    for child in sorted(node.children, key=lambda n: n.v, reverse=True):
+        if child.v >= thres:
+            dump_subtree(child, thres=thres, indent=indent+3, f=f)
+
+
+def print_tree_summary(tree, sims, f=sys.stderr):
+    best_nodes = sorted(tree.children, key=lambda n: n.v, reverse=True)[:5]
+    best_seq = []
+    node = tree
+    while node is not None:
+        best_seq.append(node.pos.last)
+        node = node.best_move()
+    print('[%4d] winrate %.3f | seq %s | can %s' %
+          (sims, best_nodes[0].winrate(), ' '.join([str_coord(c) for c in best_seq[1:6]]),
+           ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes])), file=f)
 
 
 def parse_coord(s):

@@ -241,9 +241,10 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             # XXX: The following is an extremely naive and SLOW approach
             # at things - to do it properly, we should maintain some per-group
             # data structures tracking liberties.
-            fboard = floodfill(board, d)  # board with the adjecent group replaced by '#'
+            fboard = floodfill(board, d)  # get a board with the adjecent group replaced by '#'
             if contact(fboard, '.') is not None:
                 continue  # some liberties left
+            # no liberties left for this group, remove the stones!
             capcount = fboard.count('#')
             if capcount == 1:
                 singlecaps.append(d)
@@ -260,14 +261,14 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
                         n=self.n + 1, ko=ko, last=c, last2=self.last, komi=self.komi)
 
     def pass_move(self):
-        """ pass - i.e. return a flipped position """
+        """ pass - i.e. return simply a flipped position """
         return Position(board=self.board.swapcase(), cap=(self.cap[1], self.cap[0]),
                         n=self.n + 1, ko=None, last=None, last2=self.last, komi=self.komi)
 
     def moves(self, i0):
         """ Generate a list of moves (includes false positives - suicide moves;
         does not include true-eye-filling moves), starting from a given board
-        index (that can be used for randomization)"""
+        index (that can be used for randomization) """
         i = i0-1
         passes = 0
         while True:
@@ -286,7 +287,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     def last_moves_neighbors(self):
         """ generate a randomly shuffled list of points including and
         surrounding the last two moves (but with the last move having
-        priority)"""
+        priority) """
         clist = []
         for c in self.last, self.last2:
             if c is None:  continue
@@ -307,6 +308,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             if i == -1:
                 break
             fboard = floodfill(board, i)
+            # fboard is board with some continuous area of empty space replaced by #
             touches_X = contact(fboard, 'X') is not None
             touches_x = contact(fboard, 'x') is not None
             if touches_X and not touches_x:
@@ -315,6 +317,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
                 board = fboard.replace('#', 'x')
             else:
                 board = fboard.replace('#', ':')  # seki, rare
+            # now that area is replaced either by X, x or :
         komi = self.komi if self.n % 2 == 1 else -self.komi
         if owner_map is not None:
             for c in range(W*W):
@@ -336,15 +339,15 @@ def fix_atari(pos, c, singlept_ok=False, twolib_test=True, twolib_edgeonly=False
     determining whether (i) it is in atari (ii) if it can escape it,
     either by playing on its liberty or counter-capturing another group.
 
+    N.B. this is maybe the most complicated part of the whole program (sadly);
+    feel free to just TREAT IT AS A BLACK-BOX, it's not really that
+    interesting!
+
     The return value is a tuple of (boolean, [coord..]), indicating whether
     the group is in atari and how to escape/capture (or [] if impossible).
     (Note that (False, [...]) is possible in case the group can be captured
     in a ladder - it is not in atari but some capture attack/defense moves
     are available.)
-
-    N.B. this is maybe the most complicated part of the whole program (sadly);
-    feel free to just treat it as a black-box, it's not really that
-    interesting!
 
     singlept_ok means that we will not try to save one-point groups;
     twolib_test means that we will check for 2-liberty groups which are
@@ -438,6 +441,7 @@ def cfg_distances(board, c):
     cfg_map = W*W*[-1]
     cfg_map[c] = 0
 
+    # flood-fill like mechanics
     fringe = [c]
     while fringe:
         c = fringe.pop()
@@ -462,7 +466,7 @@ def line_height(c):
 
 def empty_area(board, c, dist=3):
     """ Check whether there are any stones in Manhattan distance up
-    to 3 """
+    to dist """
     for d in neighbors(c):
         if board[d] in 'Xx':
             return False
@@ -471,10 +475,12 @@ def empty_area(board, c, dist=3):
     return True
 
 
-# 3x3 pattern routines
+# 3x3 pattern routines (those patterns stored in pat3src above)
 
 def pat3_expand(pat):
-    """ All possible neighborhood configurations matching a given pattern """
+    """ All possible neighborhood configurations matching a given pattern;
+    used just for a combinatoric explosion when loading them in an
+    in-memory set. """
     def pat_rot90(p):
         return [p[2][0] + p[1][0] + p[0][0], p[2][1] + p[1][1] + p[0][1], p[2][2] + p[1][2] + p[0][2]]
     def pat_vertflip(p):
@@ -501,11 +507,20 @@ def pat3_expand(pat):
 pat3set = set([p.replace('O', 'x') for p in pat3src for p in pat3_expand(p)])
 
 def neighborhood_33(board, c):
+    """ return a string containing the 9 points forming 3x3 square around
+    a certain move candidate """
     return (board[c-W-1 : c-W+2] + board[c-1 : c+2] + board[c+W-1 : c+W+2]).replace('\n', ' ')
 
 
+# large-scale pattern routines (those patterns living in patterns.{spat,prob} files)
+
+# are you curious how these patterns look in practice? get
+# https://github.com/pasky/pachi/blob/master/tools/pattern_spatial_show.pl
+# and try e.g. ./pattern_spatial_show.pl 71
+
 spat_patterndict = dict()  # hash(neighborhood_gridcular()) -> spatial id
 def load_spat_patterndict(f):
+    """ load dictionary of positions, translating them to numeric ids """
     global spat_patterndict
     for line in f:
         # line: 71 6 ..X.X..OO.O..........#X...... 33408f5e 188e9d3e 2166befe aa8ac9e 127e583e 1282462e 5e3d7fe 51fc9ee
@@ -516,6 +531,8 @@ def load_spat_patterndict(f):
 
 large_patterns = dict()  # spatial id -> probability
 def load_large_patterns(f):
+    """ dictionary of numeric pattern ids, translating them to probabilities
+    that a move matching such move will be played when it is available """
     # The pattern file contains other features like capture, selfatari too;
     # we ignore them for now
     global large_patterns
@@ -530,7 +547,7 @@ def load_large_patterns(f):
 
 def neighborhood_gridcular(board, c):
     """ Yield progressively wider-diameter gridcular board neighborhood
-    stone configuration strings, all possible rotations """
+    stone configuration strings, in all possible rotations """
     # Each rotations element is (xyindex, xymultiplier)
     rotations = [((0,1),(1,1)), ((0,1),(-1,1)), ((0,1),(1,-1)), ((0,1),(-1,-1)),
                  ((1,0),(1,1)), ((1,0),(-1,1)), ((1,0),(1,-1)), ((1,0),(-1,-1))]
@@ -551,7 +568,9 @@ def neighborhood_gridcular(board, c):
 
 
 def large_pattern_probability(board, c):
-    """ return probability of large-scale pattern at coordinate c """
+    """ return probability of large-scale pattern at coordinate c.
+    Multiple progressively wider patterns may match a single coordinate,
+    we consider the largest one. """
     probability = None
     matched_len = 0
     non_matched_len = 0
@@ -603,7 +622,7 @@ def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}, expen
                 already_suggested.add(c)
 
     # Try *all* available moves, but starting from a random point
-    # (in other words, play a random move)
+    # (in other words, suggest a random move)
     x, y = random.randint(1, N), random.randint(1, N)
     for c in pos.moves(y*W + x):
         yield (c, 'random')
@@ -630,6 +649,7 @@ def mcplayout(pos, amaf_map, disp=False):
             pos2 = pos.move(c)
             if pos2 is None:
                 continue
+            # check if the suggested move did not turn out to be a self-atari
             if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
                 in_atari, ds = fix_atari(pos2, c, singlept_ok=True, twolib_edgeonly=True)
                 if ds:
@@ -645,6 +665,7 @@ def mcplayout(pos, amaf_map, disp=False):
             continue
         passes = 0
         pos = pos2
+
     owner_map = W*W*[0]
     score = pos.score(owner_map)
     if disp:  print('** SCORE B%+.1f **' % (score if pos.n % 2 == 0 else -score), file=sys.stderr)
@@ -707,13 +728,6 @@ class TreeNode():
                 node.pv += PRIOR_PAT3
                 node.pw += PRIOR_PAT3
 
-        # Now, match large patterns for all children and build a probability
-        # distribution
-        patternprob_map = W*W*[None]
-        if spat_patterndict:
-            for node in self.children:
-                patternprob_map[node.pos.last] = large_pattern_probability(self.pos.board, node.pos.last)
-
         # Second pass setting priors, considering each move just once now
         for node in self.children:
             c = node.pos.last
@@ -738,8 +752,9 @@ class TreeNode():
                 node.pv += PRIOR_SELFATARI
                 node.pw += 0  # negative prior
 
-            if patternprob_map[c] is not None and patternprob_map[c] > 0.001:
-                pattern_prior = math.sqrt(patternprob_map[c])  # tone up
+            patternprob = large_pattern_probability(self.pos.board, c)
+            if patternprob is not None and patternprob > 0.001:
+                pattern_prior = math.sqrt(patternprob)  # tone up
                 node.pv += pattern_prior * PRIOR_LARGEPATTERN
                 node.pw += pattern_prior * PRIOR_LARGEPATTERN
 
@@ -789,7 +804,8 @@ def tree_descend(tree, amaf_map, disp=False):
             if amaf_map[node.pos.last] == 0:  # Mark the coordinate with 1 for black
                 amaf_map[node.pos.last] = 1 if nodes[-2].pos.n % 2 == 0 else -1
 
-        node.v += 1  # updating visits on the way down represents "virtual loss", relevant for parallelization
+        # updating visits on the way *down* represents "virtual loss", relevant for parallelization
+        node.v += 1
         if node.children is None and node.v >= EXPAND_VISITS:
             node.expand()
 
@@ -829,16 +845,18 @@ def tree_search(tree, n, owner_map, disp=False):
 
     # However, we also have an easy (though not optimal) way to parallelize
     # by distributing the mcplayout() calls to other processes using the
-    # multiprocessing module.  mcplayout() consumes maybe more than 90% CPU,
-    # especially on larger boards.
+    # multiprocessing Python module.  mcplayout() consumes maybe more than
+    # 90% CPU, especially on larger boards.  (Except that with large patterns,
+    # expand() in the tree descent phase may be quite expensive - we can tune
+    # that tradeoff by adjusting the EXPAND_VISITS constant.)
 
     n_workers = multiprocessing.cpu_count() if not disp else 1  # set to 1 when debugging
     global worker_pool
     if worker_pool is None:
         worker_pool = Pool(processes=n_workers)
-    outgoing = []
-    incoming = []
-    ongoing = []
+    outgoing = []  # positions waiting for a playout
+    incoming = []  # positions that finished evaluation
+    ongoing = []  # currently ongoing playout jobs
     i = 0
     while i < n:
         if not outgoing and not (disp and ongoing):
@@ -892,6 +910,8 @@ def tree_search(tree, n, owner_map, disp=False):
 
 ###################
 # user interface(s)
+
+# utility routines
 
 def print_pos(pos, f=sys.stderr, owner_map=None):
     """ print visualization of the given board position, optionally also
@@ -969,6 +989,8 @@ def str_coord(c):
     row, col = divmod(c - (W+1), W)
     return '%c%d' % (colstr[col], N - row)
 
+
+# various main programs
 
 def mcbenchmark(n):
     """ run n Monte-Carlo playouts from empty position, return avg. score """

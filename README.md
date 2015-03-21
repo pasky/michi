@@ -10,8 +10,8 @@ etc.
 
 Our target size is under 500 lines of code (without user interface, tables
 and empty lines / comments).  Currently, it can often win against GNUGo
-on 9x9 on an old i3 4-thread notebook, be about even with GNUGo on 15x15
-on a modern higher end computer and about two stones weaker on 19x19
+on 9×9 on an old i3 4-thread notebook, be about even with GNUGo on 15×15
+on a modern higher end computer and about two stones weaker on 19×19
 (spending no more than 30s per move).
 
 This is not meant to be a competitive engine; simplicity and clear code is
@@ -76,12 +76,23 @@ or could contain, roughly in order of priority:
   * Support for early passing and GTP stone status protocol.
   * gogui visualization support.
   * Group/liberty tracking in the board position implementation.
-  * Two or more liberty semeai reading in playouts.
-  * Simple time management.
-  * Probability distribution playouts.
-  * Tune parameters using CLOP.
 
-(One of the things I would hope to inspire is rewrite of the same
-algorithm in different, faster programming languages - hopefully seeing
-a done real-world thing is easier than developing it from scratch.  What
-about a Go engine in the Go language?)
+If you would like to increase the strength of the program, the lowest
+hanging fruit is likely:
+
+  * Tune parameters using Rémi Coulom's CLOP.
+  * Simple time management.  (See the Pachi paper.)
+  * Pondering (search game tree during opponent's move) support.
+  * Make it faster - either by optimizations (see group tracking above)
+    or 1:1 rewrite in a faster language.
+  * Two/three liberty semeai reading in playouts.  (See also CFG patterns.)
+  * Tsumego improvements - allow single-stone selfatari only for throwins
+    and detect nakade shapes.
+  * Try true probability distribution playouts + Rémi Coulom's MM patterns.
+
+(Most of the mistakes Michi makes is caused by the awfully low number of
+playouts; I believe that with 20× speedup, which seems very realistic, the same
+algorithm could easily get to KGS 4k on 19×19.  One of the things I would hope
+to inspire is rewrite of the same algorithm in different, faster programming
+languages; hopefully seeing a done real-world thing is easier than developing
+it from scratch.  What about a Go engine in the Go language?)

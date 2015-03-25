@@ -46,6 +46,7 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 1400
+UCB1_C = 0.01
 RAVE_EQUIV = 3500
 EXPAND_VISITS = 8
 PRIOR_EVEN = 10  # should be even number; 0.5 prior
@@ -762,14 +763,17 @@ class TreeNode():
             # No possible moves, add a pass move
             self.children.append(TreeNode(self.pos.pass_move()))
 
-    def rave_urgency(self):
+    def rave_urgency(self, n0):
         v = self.v + self.pv
         expectation = float(self.w+self.pw) / v
         if self.av == 0:
             return expectation
         rave_expectation = float(self.aw) / self.av
         beta = self.av / (self.av + v + float(v) * self.av / RAVE_EQUIV)
-        return beta * rave_expectation + (1-beta) * expectation
+        urgency = beta * rave_expectation + (1-beta) * expectation
+        # Add a UCB1 exploration term.  Set UCB1_C = 0 to rely only on RAVE for exploration.
+        urgency += UCB1_C * math.sqrt(2*math.log(n0) / v)
+        return urgency
 
     def winrate(self):
         return float(self.w) / self.v if self.v > 0 else float('nan')
@@ -793,7 +797,7 @@ def tree_descend(tree, amaf_map, disp=False):
             for c in children:
                 dump_subtree(c, recurse=False)
         random.shuffle(children)  # randomize the max in case of equal urgency
-        node = max(children, key=lambda node: node.rave_urgency())
+        node = max(children, key=lambda node: node.rave_urgency(nodes[-1].v))
         nodes.append(node)
 
         if disp:  print('chosen %s' % (str_coord(node.pos.last),), file=sys.stderr)
@@ -957,7 +961,7 @@ def dump_subtree(node, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
           (indent*' ', str_coord(node.pos.last), node.winrate(),
            node.w, node.v, node.pw, node.pv, node.aw, node.av,
            float(node.aw)/node.av if node.av > 0 else float('nan'),
-           node.rave_urgency()), file=f)
+           node.rave_urgency(1)), file=f)  # XXX: pass n0 to rave_urgency()
     if not recurse:
         return
     for child in sorted(node.children, key=lambda n: n.v, reverse=True):

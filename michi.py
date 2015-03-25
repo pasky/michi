@@ -13,13 +13,13 @@
 #
 # To start reading the code, begin either:
 # * Bottom up, by looking at the goban implementation - starting with
-#   the 'empty' definition below and Position.move() method
+#   the 'empty' definition below and Position.move() method.
 # * In the middle, by looking at the Monte Carlo playout implementation,
-#   starting with the mcplayout() function
+#   starting with the mcplayout() function.
 # * Top down, by looking at the MCTS implementation, starting with the
 #   tree_search() function.  It can look a little confusing due to the
 #   parallelization, but really is just a loop of tree_descend(),
-#   mcplayout() and tree_update() round and round
+#   mcplayout() and tree_update() round and round.
 # It may be better to jump around a bit instead of just reading straight
 # from start to end.
 

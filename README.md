@@ -8,11 +8,11 @@ Computer Go, peek under the hood of a "real" playing engine and be able
 to learn by hassle-free experiments - with the algorithms, add heuristics,
 etc.
 
-Our target size is under 500 lines of code (without user interface, tables
+The algorithm code size is 540 lines of code (without user interface, tables
 and empty lines / comments).  Currently, it can often win against GNUGo
-on 9×9 on an old i3 4-thread notebook, be about even with GNUGo on 15×15
-on a modern higher end computer and about two stones weaker on 19×19
-(spending no more than 30s per move).
+on 9×9 on an old i3 notebook, be about even with GNUGo on 15×15 on a modern
+higher end computer and about two stones weaker on 19×19 (spending no more
+than 30s per move).
 
 This is not meant to be a competitive engine; simplicity and clear code is
 preferred over optimization (after all, it's in Python!).  But compared to

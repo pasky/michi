@@ -1052,11 +1052,20 @@ def gtp_io():
     """ GTP interface for our program.  We can play only on the board size
     which is configured (N), and we ignore color information and assume
     alternating play! """
+    known_commands = ['boardsize', 'clear_board', 'komi', 'play', 'genmove',
+                      'final_score', 'quit', 'name', 'version', 'known_command',
+                      'list_commands', 'protocol_version', 'tsdebug']
+
     tree = TreeNode(pos=empty_position())
     tree.expand()
 
     while True:
-        line = raw_input().rstrip()
+        try:
+            line = raw_input().strip()
+        except EOFError:
+            break
+        if line == '':
+            continue
         command = [s.lower() for s in line.split()]
         if re.match('\d+', command[0]):
             cmdid = command[0]
@@ -1117,9 +1126,14 @@ def gtp_io():
         elif command[0] == "tsdebug":
             print_pos(tree_search(tree, N_SIMS, W*W*[0], disp=True))
         elif command[0] == "list_commands":
-            ret = '\n'.join(['boardsize', 'clear_board', 'komi', 'play', 'genmove', 'final_score', 'name', 'version', 'list_commands', 'ts_debug'])
+            ret = '\n'.join(known_commands)
+        elif command[0] == "known_command":
+            ret = 'true' if command[1] in known_commands else 'false'
         elif command[0] == "protocol_version":
             ret = '2'
+        elif command[0] == "quit":
+            print('=%s \n\n' % (cmdid,), end='')
+            break
         else:
             print('Warning: Ignoring unknown command - %s' % (line,), file=sys.stderr)
             ret = None

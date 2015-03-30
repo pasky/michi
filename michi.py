@@ -147,17 +147,18 @@ def board_put(board, c, p):
 
 def floodfill(board, c):
     """ replace continuous-color area starting at c with special color # """
-    # XXX: Use bytearray to speed things up?
-    p = board[c]
-    board = board_put(board, c, '#')
+    # This is called so much that a bytearray is worthwhile...
+    byteboard = bytearray(board)
+    p = byteboard[c]
+    byteboard[c] = ord('#')
     fringe = [c]
     while fringe:
         c = fringe.pop()
         for d in neighbors(c):
-            if board[d] == p:
-                board = board_put(board, d, '#')
+            if byteboard[d] == p:
+                byteboard[d] = ord('#')
                 fringe.append(d)
-    return board
+    return str(byteboard)
 
 
 # Regex that matches various kind of points adjecent to '#' (floodfilled) points

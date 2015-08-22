@@ -94,7 +94,7 @@ pat3src = [  # 3x3 playout patterns; X,O are colors, x,o are their inverses
         "???"],
        ["X.?",  # side pattern - chase
         "O.?",
-        "  ?"],
+        "   "],
        ["OX?",  # side pattern - block side cut
         "X.O",
         "   "],
@@ -521,7 +521,6 @@ def neighborhood_33(board, c):
 spat_patterndict = dict()  # hash(neighborhood_gridcular()) -> spatial id
 def load_spat_patterndict(f):
     """ load dictionary of positions, translating them to numeric ids """
-    global spat_patterndict
     for line in f:
         # line: 71 6 ..X.X..OO.O..........#X...... 33408f5e 188e9d3e 2166befe aa8ac9e 127e583e 1282462e 5e3d7fe 51fc9ee
         if line.startswith('#'):
@@ -535,7 +534,6 @@ def load_large_patterns(f):
     that a move matching such move will be played when it is available """
     # The pattern file contains other features like capture, selfatari too;
     # we ignore them for now
-    global large_patterns
     for line in f:
         # line: 0.004 14 3842 (capture:17 border:0 s:784)
         p = float(line.split()[0])

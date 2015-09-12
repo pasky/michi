@@ -96,3 +96,6 @@ algorithm could easily get to KGS 4k on 19×19.  One of the things I would hope
 to inspire is rewrite of the same algorithm in different, faster programming
 languages; hopefully seeing a done real-world thing is easier than developing
 it from scratch.  What about a Go engine in the Go language?)
+
+**michi-c** is such a rewrite of Michi, in C++.  It seems to play even with
+GNUGo when given 3.3s/move: https://github.com/db3108/michi-c

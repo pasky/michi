@@ -32,6 +32,7 @@ from multiprocessing.pool import Pool
 import random
 import re
 import sys
+import time
 
 
 # Given a board of size NxN (N=9, 19, ...), we represent the position
@@ -1168,7 +1169,11 @@ if __name__ == "__main__":
     elif sys.argv[1] == "mcbenchmark":
         print(mcbenchmark(20))
     elif sys.argv[1] == "tsbenchmark":
+        t_start = time.time()
         print_pos(tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=False).pos)
+        print('Tree search with %d playouts took %.3fs with %d threads; speed is %.3f playouts/thread/s' %
+              (N_SIMS, time.time() - t_start, multiprocessing.cpu_count(),
+               N_SIMS / ((time.time() - t_start) * multiprocessing.cpu_count())))
     elif sys.argv[1] == "tsdebug":
         print_pos(tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=True).pos)
     else:

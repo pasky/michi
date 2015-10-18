@@ -1103,7 +1103,7 @@ def gtp_io():
                     tree = TreeNode(pos=tree.pos.pass_move())
         elif command[0] == "genmove":
             tree = tree_search(tree, N_SIMS, owner_map)
-            if tree.pos.last is None and tree.pos.last2 is None:
+            if tree.pos.last is None:
                 ret = 'pass'
             elif float(tree.w)/tree.v < RESIGN_THRES:
                 ret = 'resign'

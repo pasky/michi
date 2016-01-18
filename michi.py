@@ -1077,6 +1077,7 @@ def gtp_io():
         if command[0] == "boardsize":
             if int(command[1]) != N:
                 print("Warning: Trying to set incompatible boardsize %s (!= %d)" % (command[1], N), file=sys.stderr)
+                ret = None
         elif command[0] == "clear_board":
             tree = TreeNode(pos=empty_position())
             tree.expand()

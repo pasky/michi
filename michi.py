@@ -1011,7 +1011,11 @@ def game_io(computer_black=False):
             print_pos(tree.pos, sys.stdout, owner_map)
 
             sc = raw_input("Your move: ")
-            c = parse_coord(sc)
+            try:
+                c = parse_coord(sc)
+            except:
+                print('An incorrect move')
+                continue
             if c is not None:
                 # Not a pass
                 if tree.pos.board[c] != '.':

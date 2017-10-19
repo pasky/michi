@@ -1002,7 +1002,7 @@ def str_coord(c):
 
 # various main programs
 
-def play_and_train(disp=False):
+def play_and_train(batches_per_game=4, disp=False):
     positions = []
 
     tree = TreeNode(pos=empty_position())
@@ -1048,7 +1048,8 @@ def play_and_train(disp=False):
             break
 
     print(score)
-    net.fit_game(positions, score)
+    for i in range(batches_per_game):
+        net.fit_game(positions, score)
 
 
 def selfplay(snapshot_interval=100, disp=False):

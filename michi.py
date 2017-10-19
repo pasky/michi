@@ -281,9 +281,9 @@ class ResNet(object):
         self.kernel_height = kernel_height
         self.n_stages = n_stages
 
-    def create(self, width, height):
+    def create(self, width, height, n_planes):
         bn_axis = 3
-        inp = Input(shape=(width, height, 2))
+        inp = Input(shape=(width, height, n_planes))
 
         x = inp
         x = Conv2D(self.input_N, (self.inpkern_width, self.inpkern_height), padding='same', name='conv1')(x)
@@ -335,9 +335,9 @@ class AGZeroModel:
     def create(self):
         bn_axis = 3
 
-        position = Input((N, N, 2))
+        position = Input((N, N, 3))
         resnet = ResNet(n_stages=N)
-        resnet.create(N, N)
+        resnet.create(N, N, 3)
         x = resnet.model(position)
 
         dist = Conv2D(2, (1, 1))(x)
@@ -383,7 +383,7 @@ class AGZeroModel:
         return self.predict(position)[1][0][0] * 2 - 1
 
     def _X_position(self, position):
-        my_stones, their_stones = np.zeros((N, N)), np.zeros((N, N))
+        my_stones, their_stones, edge = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
         for c, p in enumerate(position.board):
             x, y = c % W - 1, c // W - 1
             # In either case, y and x should be sane (not off-board)
@@ -391,7 +391,9 @@ class AGZeroModel:
                 my_stones[y, x] = 1
             elif p == 'x':
                 their_stones[y, x] = 1
-        return np.stack((my_stones, their_stones), axis=-1)
+            if (x >= 0 and x < N and y >= 0 and y < N) and (x == 0 or x == N-1 or y == 0 or y == N-1):
+                edge[y, x] = 1
+        return np.stack((my_stones, their_stones, edge), axis=-1)
 
 
 ########################

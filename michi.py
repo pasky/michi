@@ -53,6 +53,7 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 
 N_SIMS = 200
 PUCT_C = 0.1
+PROPORTIONAL_STAGE = 5
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
@@ -461,9 +462,18 @@ class TreeNode():
     def prior(self):
         return float(self.pw) / self.pv if self.pv > 0 else float('nan')
 
-    def best_move(self):
+    def best_move(self, proportional=False):
         """ best move is the most simulated one """
-        return max(self.children, key=lambda node: node.v) if self.children is not None else None
+        if self.children is None:
+            return None
+        if proportional:
+            probs = [float(node.v) / self.v for node in self.children]
+            probs_tot = sum(probs)
+            probs = [p / probs_tot for p in probs]
+            i = np.random.choice(len(self.children), p=probs)
+            return self.children[i]
+        else:
+            return max(self.children, key=lambda node: node.v)
 
 
 def tree_descend(tree, amaf_map, disp=False):
@@ -561,7 +571,7 @@ def tree_search(tree, n, owner_map, disp=False):
         dump_subtree(tree)
     if i % REPORT_PERIOD != 0:
         print_tree_summary(tree, i, f=sys.stderr)
-    return tree.best_move()
+    return tree.best_move(tree.pos.n <= PROPORTIONAL_STAGE)
 
 
 ###################
@@ -683,7 +693,7 @@ def play_and_train(batches_per_game=4, disp=False):
                 count = -count
             print('Counted score: B%+.1f' % (count,))
             break
-        if float(tree.w)/tree.v < RESIGN_THRES:
+        if float(tree.w)/tree.v < RESIGN_THRES and tree.v > N_SIMS / 10:
             score = 1  # win for player to-play from this position
             if tree.pos.n % 2:
                 score = -score

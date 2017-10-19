@@ -890,11 +890,23 @@ def tree_search(tree, n, owner_map, disp=False):
 
         last_node = nodes[-1]
         if last_node.pos.last is None and last_node.pos.last2 is None:
-            score = -1 if last_node.pos.score() > 0 else 1
-            if last_node.pos.n % 2:
-                score = -score
+            score = 1 if last_node.pos.score() > 0 else -1
+            #game_score = score
+            #if last_node.pos.n % 2:
+            #    game_score = -game_score
+            #print_pos(last_node.pos, sys.stdout, owner_map)
+            #print('[TREE] Two passes, score: B%+.1f (%d)' % (game_score, score))
+            #count = last_node.pos.score()
+            #if last_node.pos.n % 2:
+            #    count = -count
+            #print('[TREE] Counted score: B%+.1f' % (count,))
         else:
             score = net.predict_winrate(last_node.pos)
+            #print('[TREE] Predicted score: B%+.4f' % (score,))
+            #count = last_node.pos.score()
+            #if last_node.pos.n % 2:
+            #    count = -count
+            #print('[TREE] Counted score: B%+.1f' % (count,))
 
         tree_update(nodes, amaf_map, score, disp=disp)
 
@@ -1013,13 +1025,25 @@ def play_and_train(disp=False):
         print_pos(tree.pos, sys.stdout, owner_map)
 
         if tree.pos.last is None and tree.pos.last2 is None:
-            score = -1 if tree.pos.score() > 0 else 1
+            score = 1 if tree.pos.score() > 0 else -1
             if tree.pos.n % 2:
                 score = -score
+            print('Two passes, score: B%+.1f' % (score,))
+
+            count = tree.pos.score()
+            if tree.pos.n % 2:
+                count = -count
+            print('Counted score: B%+.1f' % (count,))
             break
         if float(tree.w)/tree.v < RESIGN_THRES or tree.pos.n > N*N*2:
-            # score is -1 if white loses
-            score = 1 if tree.pos.n % 2 else -1
+            # score is -1 if black resigns
+            score = -1 if tree.pos.n % 2 else 1
+            print('Resign (%d), score: B%+.1f' % (tree.pos.n % 2, score))
+
+            count = tree.pos.score()
+            if tree.pos.n % 2:
+                count = -count
+            print('Counted score: B%+.1f' % (count,))
             break
 
     print(score)

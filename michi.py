@@ -1010,6 +1010,8 @@ def play_and_train(disp=False):
         positions.append((tree.pos, distribution))
 
         tree = next_tree
+        print_pos(tree.pos, sys.stdout, owner_map)
+
         if tree.pos.last is None and tree.pos.last2 is None:
             score = 1 if tree.pos.score() > 0 else -1
             if tree.pos.n % 2:
@@ -1020,7 +1022,6 @@ def play_and_train(disp=False):
             score = -1 if tree.pos.n % 2 else 1
             break
 
-    print_pos(tree.pos, sys.stdout, owner_map)
     print(score)
     net.fit_game(positions, score)
 

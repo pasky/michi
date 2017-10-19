@@ -697,9 +697,8 @@ def play_and_train(batches_per_game=4, disp=False):
 
     # score here is for black to play (player-to-play from empty_position)
     print(score)
-    if score != 0:
-        for i in range(batches_per_game):
-            net.fit_game(positions, score)
+    for i in range(batches_per_game):
+        net.fit_game(positions, score)
 
 
 def selfplay(snapshot_interval=100, disp=False):

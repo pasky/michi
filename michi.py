@@ -53,7 +53,7 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 100
-RAVE_EQUIV = 3500
+RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
 PRIOR_NET = 40
@@ -998,7 +998,7 @@ def play_and_train(disp=False):
             if tree.pos.n % 2:
                 score = -score
             break
-        if float(tree.w)/tree.v < RESIGN_THRES:
+        if float(tree.w)/tree.v < RESIGN_THRES or tree.pos.n > N*N*2:
             # score is 1 if black wins
             score = 1 if tree.pos.n % 2 else -1
             break

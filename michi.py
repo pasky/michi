@@ -722,6 +722,7 @@ class AGZeroModel:
 
     def fit_game(self, positions, result):
         X, y_dist, y_res = [], [], []
+        result = -result  # flip result initially as the first position is empty board
         for pos, dist in positions:
             X.append(self._X_position(pos))
             y_dist.append(dist)

@@ -884,7 +884,8 @@ def tree_search(tree, n, owner_map, disp=False):
 
     if disp:
         dump_subtree(tree)
-    print_tree_summary(tree, i, f=sys.stderr)
+    if i % REPORT_PERIOD != 0:
+        print_tree_summary(tree, i, f=sys.stderr)
     return tree.best_move()
 
 

@@ -816,6 +816,9 @@ class TreeNode():
     def winrate(self):
         return float(self.w) / self.v if self.v > 0 else float('nan')
 
+    def prior(self):
+        return float(self.pw) / self.pv if self.pv > 0 else float('nan')
+
     def best_move(self):
         """ best move is the most simulated one """
         return max(self.children, key=lambda node: node.v) if self.children is not None else None
@@ -982,9 +985,10 @@ def print_tree_summary(tree, sims, f=sys.stderr):
     while node is not None:
         best_seq.append(node.pos.last)
         node = node.best_move()
-    print('[%4d] winrate %.3f | seq %s | can %s' %
-          (sims, best_nodes[0].winrate(), ' '.join([str_coord(c) for c in best_seq[1:6]]),
-           ' '.join(['%s(%.3f|%d)' % (str_coord(n.pos.last), n.winrate(), n.v) for n in best_nodes])), file=f)
+    best_predwinrate = float(net.predict_winrate(best_nodes[0].pos) + 1) / 2
+    print('[%4d] winrate %.3f/%.3f | seq %s | can %s' %
+          (sims, best_nodes[0].winrate(), best_predwinrate, ' '.join([str_coord(c) for c in best_seq[1:6]]),
+           ' '.join(['%s(%.3f|%d/%.3f)' % (str_coord(n.pos.last), n.winrate(), n.v, n.prior()) for n in best_nodes])), file=f)
 
 
 def parse_coord(s):

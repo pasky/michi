@@ -34,29 +34,29 @@ import re
 import sys
 import time
 
+from keras.models import Model
+from keras.layers import Activation, BatchNormalization, Dense, Flatten, Input, Reshape
+from keras.layers.convolutional import Conv2D
+from keras.layers.merge import add
+import numpy as np
+
 
 # Given a board of size NxN (N=9, 19, ...), we represent the position
 # as an (N+1)*(N+2) string, with '.' (empty), 'X' (to-play player),
 # 'x' (other player), and whitespace (off-board border to make rules
 # implementation easier).  Coordinates are just indices in this string.
 # You can simply print(board) when debugging.
-N = 13
+N = 3
 W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
-N_SIMS = 1400
+N_SIMS = 100
 RAVE_EQUIV = 3500
-EXPAND_VISITS = 8
-PRIOR_EVEN = 10  # should be even number; 0.5 prior
-PRIOR_SELFATARI = 10  # negative prior
-PRIOR_CAPTURE_ONE = 15
-PRIOR_CAPTURE_MANY = 30
-PRIOR_PAT3 = 10
-PRIOR_LARGEPATTERN = 100  # most moves have relatively small probability
-PRIOR_CFG = [24, 22, 8]  # priors for moves in cfg dist. 1, 2, 3
-PRIOR_EMPTYAREA = 10
+EXPAND_VISITS = 1
+PRIOR_EVEN = 4  # should be even number; 0.5 prior
+PRIOR_NET = 40
 REPORT_PERIOD = 200
 PROB_HEURISTIC = {'capture': 0.9, 'pat3': 0.95}  # probability of heuristic suggestions being taken in playout
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
@@ -330,7 +330,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
 
 def empty_position():
     """ Return an initial board position """
-    return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None, komi=7.5)
+    return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None, komi=0.5)  #7.5)
 
 
 ###############
@@ -628,50 +628,129 @@ def gen_playout_moves(pos, heuristic_set, probs={'capture': 1, 'pat3': 1}, expen
         yield (c, 'random')
 
 
-def mcplayout(pos, amaf_map, disp=False):
-    """ Start a Monte Carlo playout from a given position,
-    return score for to-play player at the starting position;
-    amaf_map is board-sized scratchpad recording who played at a given
-    position first """
-    if disp:  print('** SIMULATION **', file=sys.stderr)
-    start_n = pos.n
-    passes = 0
-    while passes < 2 and pos.n < MAX_GAME_LEN:
-        if disp:  print_pos(pos)
+class ResNet(object):
+    def __init__(self, input_N=256, filter_N=256, n_stages=19,
+                 kernel_width=3, kernel_height=3,
+                 inpkern_width=3, inpkern_height=3):
+        # number of filters and dimensions of the initial input kernel
+        self.input_N = input_N
+        self.inpkern_width = inpkern_width
+        self.inpkern_height = inpkern_height
+        # base number of filters and dimensions of the followup resnet kernels
+        self.filter_N = filter_N
+        self.kernel_width = kernel_width
+        self.kernel_height = kernel_height
+        self.n_stages = n_stages
 
-        pos2 = None
-        # We simply try the moves our heuristics generate, in a particular
-        # order, but not with 100% probability; this is on the border between
-        # "rule-based playouts" and "probability distribution playouts".
-        for c, kind in gen_playout_moves(pos, pos.last_moves_neighbors(), PROB_HEURISTIC):
-            if disp and kind != 'random':
-                print('move suggestion', str_coord(c), kind, file=sys.stderr)
-            pos2 = pos.move(c)
-            if pos2 is None:
-                continue
-            # check if the suggested move did not turn out to be a self-atari
-            if random.random() <= (PROB_RSAREJECT if kind == 'random' else PROB_SSAREJECT):
-                in_atari, ds = fix_atari(pos2, c, singlept_ok=True, twolib_edgeonly=True)
-                if ds:
-                    if disp:  print('rejecting self-atari move', str_coord(c), file=sys.stderr)
-                    pos2 = None
-                    continue
-            if amaf_map[c] == 0:  # Mark the coordinate with 1 for black
-                amaf_map[c] = 1 if pos.n % 2 == 0 else -1
-            break
-        if pos2 is None:  # no valid moves, pass
-            pos = pos.pass_move()
-            passes += 1
-            continue
-        passes = 0
-        pos = pos2
+    def create(self, width, height):
+        bn_axis = 3
+        inp = Input(shape=(width, height, 2))
 
-    owner_map = W*W*[0]
-    score = pos.score(owner_map)
-    if disp:  print('** SCORE B%+.1f **' % (score if pos.n % 2 == 0 else -score), file=sys.stderr)
-    if start_n % 2 != pos.n % 2:
-        score = -score
-    return score, amaf_map, owner_map
+        x = inp
+        x = Conv2D(self.input_N, (self.inpkern_width, self.inpkern_height), padding='same', name='conv1')(x)
+        x = BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
+        x = Activation('relu')(x)
+
+        for i in range(self.n_stages):
+            x = self.identity_block(x, [self.filter_N, self.filter_N], stage=i+1, block='a')
+
+        self.model = Model(inp, x)
+        return self.model
+
+    def identity_block(self, input_tensor, filters, stage, block):
+        '''The identity_block is the block that has no conv layer at shortcut
+
+        # Arguments
+            input_tensor: input tensor
+            filters: list of integers, the nb_filters of 3 conv layer at main path
+            stage: integer, current stage label, used for generating layer names
+            block: 'a','b'..., current block label, used for generating layer names
+        '''
+        nb_filter1, nb_filter2 = filters
+        bn_axis = 3
+        conv_name_base = 'res' + str(stage) + block + '_branch'
+        bn_name_base = 'bn' + str(stage) + block + '_branch'
+
+        x = input_tensor
+        x = Conv2D(nb_filter1, (self.kernel_width, self.kernel_height),
+                          padding='same', name=conv_name_base + 'a')(x)
+        x = BatchNormalization(axis=bn_axis, name=bn_name_base + 'a')(x)
+        x = Activation('relu')(x)
+
+        x = Conv2D(nb_filter2, (self.kernel_width, self.kernel_height),
+                          padding='same', name=conv_name_base + 'b')(x)
+        x = BatchNormalization(axis=bn_axis, name=bn_name_base + 'b')(x)
+        x = Activation('relu')(x)
+
+        x = add([x, input_tensor])
+        x = Activation('relu')(x)
+        return x
+
+
+class AGZeroModel:
+    def __init__(self, batch_size=32):
+        self.batch_size = 32
+        self.model_name = time.strftime('G%y%m%dT%H%M%S')
+        print(self.model_name)
+
+    def create(self):
+        bn_axis = 3
+
+        position = Input((N, N, 2))
+        resnet = ResNet()
+        resnet.create(N, N)
+        x = resnet.model(position)
+
+        dist = Conv2D(2, (1, 1))(x)
+        dist = BatchNormalization(axis=bn_axis)(dist)
+        dist = Activation('relu')(dist)
+        dist = Flatten()(dist)
+        dist = Dense(N * N, activation='softmax')(dist)
+        dist = Reshape((N, N), name='distribution')(dist)
+
+        res = Conv2D(1, (1, 1))(x)
+        res = BatchNormalization(axis=bn_axis)(res)
+        res = Activation('relu')(res)
+        res = Flatten()(res)
+        res = Dense(256, activation='relu')(res)
+        res = Dense(1, activation='tanh', name='result')(res)
+
+        self.model = Model(position, [dist, res])
+        self.model.compile('adam', ['categorical_crossentropy', 'binary_crossentropy'])
+        self.model.summary()
+
+    def fit_game(self, positions, result):
+        X, y_dist, y_res = [], [], []
+        for pos, dist in positions:
+            X.append(self._X_position(pos))
+            y_dist.append(dist)
+            y_res.append(result)
+            if len(X) % self.batch_size == 0:
+                self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
+                X, y_dist, y_res = [], [], []
+        if len(X) > 0:
+            self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
+
+    def predict(self, position):
+        X = self._X_position(position)
+        return self.model.predict(np.array([X]))
+
+    def predict_distribution(self, position):
+        return self.predict(position)[0][0]
+
+    def predict_winrate(self, position):
+        return self.predict(position)[1][0]
+
+    def _X_position(self, position):
+        my_stones, their_stones = np.zeros((N, N)), np.zeros((N, N))
+        for c, p in enumerate(position.board):
+            x, y = c % W - 1, c // W - 1
+            # In either case, y and x should be sane (not off-board)
+            if p == 'X':
+                my_stones[y, x] = 1
+            elif p == 'x':
+                their_stones[y, x] = 1
+        return np.stack((my_stones, their_stones), axis=-1)
 
 
 ########################
@@ -695,68 +774,20 @@ class TreeNode():
 
     def expand(self):
         """ add and initialize children to a leaf node """
-        cfg_map = cfg_distances(self.pos.board, self.pos.last) if self.pos.last is not None else None
+        distribution = net.predict_distribution(self.pos)
         self.children = []
-        childset = dict()
-        # Use playout generator to generate children and initialize them
-        # with some priors to bias search towards more sensible moves.
-        # Note that there can be many ways to incorporate the priors in
-        # next node selection (progressive bias, progressive widening, ...).
-        for c, kind in gen_playout_moves(self.pos, range(N, (N+1)*W), expensive_ok=True):
+        for c in self.pos.moves(0):
             pos2 = self.pos.move(c)
             if pos2 is None:
                 continue
-            # gen_playout_moves() will generate duplicate suggestions
-            # if a move is yielded by multiple heuristics
-            try:
-                node = childset[pos2.last]
-            except KeyError:
-                node = TreeNode(pos2)
-                self.children.append(node)
-                childset[pos2.last] = node
+            node = TreeNode(pos2)
+            self.children.append(node)
 
-            if kind.startswith('capture'):
-                # Check how big group we are capturing; coord of the group is
-                # second word in the ``kind`` string
-                if floodfill(self.pos.board, int(kind.split()[1])).count('#') > 1:
-                    node.pv += PRIOR_CAPTURE_MANY
-                    node.pw += PRIOR_CAPTURE_MANY
-                else:
-                    node.pv += PRIOR_CAPTURE_ONE
-                    node.pw += PRIOR_CAPTURE_ONE
-            elif kind == 'pat3':
-                node.pv += PRIOR_PAT3
-                node.pw += PRIOR_PAT3
+            x, y = c % W - 1, c // W - 1
+            value = distribution[y, x]
 
-        # Second pass setting priors, considering each move just once now
-        for node in self.children:
-            c = node.pos.last
-
-            if cfg_map is not None and cfg_map[c]-1 < len(PRIOR_CFG):
-                node.pv += PRIOR_CFG[cfg_map[c]-1]
-                node.pw += PRIOR_CFG[cfg_map[c]-1]
-
-            height = line_height(c)  # 0-indexed
-            if height <= 2 and empty_area(self.pos.board, c):
-                # No stones around; negative prior for 1st + 2nd line, positive
-                # for 3rd line; sanitizes opening and invasions
-                if height <= 1:
-                    node.pv += PRIOR_EMPTYAREA
-                    node.pw += 0
-                if height == 2:
-                    node.pv += PRIOR_EMPTYAREA
-                    node.pw += PRIOR_EMPTYAREA
-
-            in_atari, ds = fix_atari(node.pos, c, singlept_ok=True)
-            if ds:
-                node.pv += PRIOR_SELFATARI
-                node.pw += 0  # negative prior
-
-            patternprob = large_pattern_probability(self.pos.board, c)
-            if patternprob is not None and patternprob > 0.001:
-                pattern_prior = math.sqrt(patternprob)  # tone up
-                node.pv += pattern_prior * PRIOR_LARGEPATTERN
-                node.pw += pattern_prior * PRIOR_LARGEPATTERN
+            node.pv = PRIOR_NET
+            node.pw = PRIOR_NET * value
 
         if not self.children:
             # No possible moves, add a pass move
@@ -831,79 +862,27 @@ def tree_update(nodes, amaf_map, score, disp=False):
         score = -score
 
 
-worker_pool = None
-
 def tree_search(tree, n, owner_map, disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
     # Initialize root node
     if tree.children is None:
         tree.expand()
 
-    # We could simply run tree_descend(), mcplayout(), tree_update()
-    # sequentially in a loop.  This is essentially what the code below
-    # does, if it seems confusing!
-
-    # However, we also have an easy (though not optimal) way to parallelize
-    # by distributing the mcplayout() calls to other processes using the
-    # multiprocessing Python module.  mcplayout() consumes maybe more than
-    # 90% CPU, especially on larger boards.  (Except that with large patterns,
-    # expand() in the tree descent phase may be quite expensive - we can tune
-    # that tradeoff by adjusting the EXPAND_VISITS constant.)
-
-    n_workers = multiprocessing.cpu_count() if not disp else 1  # set to 1 when debugging
-    global worker_pool
-    if worker_pool is None:
-        worker_pool = Pool(processes=n_workers)
-    outgoing = []  # positions waiting for a playout
-    incoming = []  # positions that finished evaluation
-    ongoing = []  # currently ongoing playout jobs
     i = 0
     while i < n:
-        if not outgoing and not (disp and ongoing):
-            # Descend the tree so that we have something ready when a worker
-            # stops being busy
-            amaf_map = W*W*[0]
-            nodes = tree_descend(tree, amaf_map, disp=disp)
-            outgoing.append((nodes, amaf_map))
+        amaf_map = W*W*[0]
+        nodes = tree_descend(tree, amaf_map, disp=disp)
 
-        if len(ongoing) >= n_workers:
-            # Too many playouts running? Wait a bit...
-            ongoing[0][0].wait(0.01 / n_workers)
-        else:
-            i += 1
-            if i > 0 and i % REPORT_PERIOD == 0:
-                print_tree_summary(tree, i, f=sys.stderr)
+        i += 1
+        if i > 0 and i % REPORT_PERIOD == 0:
+            print_tree_summary(tree, i, f=sys.stderr)
 
-            # Issue an mcplayout job to the worker pool
-            nodes, amaf_map = outgoing.pop()
-            ongoing.append((worker_pool.apply_async(mcplayout, (nodes[-1].pos, amaf_map, disp)), nodes))
+        score = net.predict_winrate(nodes[-1].pos)
 
-        # Anything to store in the tree?  (We do this step out-of-order
-        # picking up data from the previous round so that we don't stall
-        # ready workers while we update the tree.)
-        while incoming:
-            score, amaf_map, owner_map_one, nodes = incoming.pop()
-            tree_update(nodes, amaf_map, score, disp=disp)
-            for c in range(W*W):
-                owner_map[c] += owner_map_one[c]
+        tree_update(nodes, amaf_map, score, disp=disp)
 
-        # Any playouts are finished yet?
-        for job, nodes in ongoing:
-            if not job.ready():
-                continue
-            # Yes! Queue them up for storing in the tree.
-            score, amaf_map, owner_map_one = job.get()
-            incoming.append((score, amaf_map, owner_map_one, nodes))
-            ongoing.remove((job, nodes))
-
-        # Early stop test
-        best_wr = tree.best_move().winrate()
-        if i > n*0.05 and best_wr > FASTPLAY5_THRES or i > n*0.2 and best_wr > FASTPLAY20_THRES:
-            break
-
-    for c in range(W*W):
-        owner_map[c] = float(owner_map[c]) / i
-    dump_subtree(tree)
+    if disp:
+        dump_subtree(tree)
     print_tree_summary(tree, i, f=sys.stderr)
     return tree.best_move()
 
@@ -992,12 +971,52 @@ def str_coord(c):
 
 # various main programs
 
-def mcbenchmark(n):
-    """ run n Monte-Carlo playouts from empty position, return avg. score """
-    sumscore = 0
-    for i in range(0, n):
-        sumscore += mcplayout(empty_position(), W*W*[0])[0]
-    return float(sumscore) / n
+def play_and_train(disp=False):
+    positions = []
+
+    tree = TreeNode(pos=empty_position())
+    tree.expand()
+    owner_map = W*W*[0]
+    while True:
+        owner_map = W*W*[0]
+        next_tree = tree_search(tree, N_SIMS, owner_map)
+
+        distribution = np.zeros((N, N))
+        for child in tree.children:
+            if child.pos.last is None:
+                continue  # TODO pass moves
+            p = child.v / tree.v
+            c = child.pos.last
+            x, y = c % W - 1, c // W - 1
+            distribution[y, x] = p
+        positions.append((tree.pos, distribution))
+
+        tree = next_tree
+        if tree.pos.last is None and tree.pos.last2 is None:
+            score = 1 if tree.pos.score() > 0 else -1
+            if tree.pos.n % 2:
+                score = -score
+            break
+        if float(tree.w)/tree.v < RESIGN_THRES:
+            # score is 1 if black wins
+            score = 1 if tree.pos.n % 2 else -1
+            break
+
+    print_pos(tree.pos, sys.stdout, owner_map)
+    print(score)
+    net.fit_game(positions, score)
+
+
+def selfplay(snapshot_interval=20, disp=False):
+    i = 0
+    while True:
+        print('Self-play of game #%d ...' % (i,))
+        play_and_train()
+        i += 1
+        if i % snapshot_interval == 0:
+            weights_fname = '%s_%09d.weights.h5' % (net.model_name, i)
+            print(weights_fname)
+            net.model.save_weights(weights_fname)
 
 
 def game_io(computer_black=False):
@@ -1148,16 +1167,9 @@ def gtp_io():
 
 
 if __name__ == "__main__":
-    try:
-        with open(spat_patterndict_file) as f:
-            print('Loading pattern spatial dictionary...', file=sys.stderr)
-            load_spat_patterndict(f)
-        with open(large_patterns_file) as f:
-            print('Loading large patterns...', file=sys.stderr)
-            load_large_patterns(f)
-        print('Done.', file=sys.stderr)
-    except IOError as e:
-        print('Warning: Cannot load pattern files: %s; will be much weaker, consider lowering EXPAND_VISITS 5->2' % (e,), file=sys.stderr)
+    global net
+    net = AGZeroModel()
+    net.create()
     if len(sys.argv) < 2:
         # Default action
         game_io()
@@ -1177,5 +1189,7 @@ if __name__ == "__main__":
                N_SIMS / ((time.time() - t_start) * multiprocessing.cpu_count())))
     elif sys.argv[1] == "tsdebug":
         print_pos(tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=True).pos)
+    elif sys.argv[1] == "selfplay":
+        selfplay()
     else:
         print('Unknown action', file=sys.stderr)

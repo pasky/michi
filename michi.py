@@ -358,10 +358,10 @@ class AGZeroModel:
         self.model.compile('adam', ['categorical_crossentropy', 'binary_crossentropy'])
         self.model.summary()
 
-    def fit_game(self, positions, result):
+    def fit_game(self, positions, result, board_transform=None):
         X, y_dist, y_res = [], [], []
         for pos, dist in positions:
-            X.append(self._X_position(pos))
+            X.append(self._X_position(pos, board_transform=board_transform))
             y_dist.append(dist)
             y_res.append(float(result) / 2 + 0.5)
             if len(X) % self.batch_size == 0:
@@ -381,9 +381,12 @@ class AGZeroModel:
     def predict_winrate(self, position):
         return self.predict(position)[1][0][0] * 2 - 1
 
-    def _X_position(self, position):
+    def _X_position(self, position, board_transform=None):
         my_stones, their_stones, edge = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
-        for c, p in enumerate(position.board):
+        board = position.board
+        if board_transform:
+            board = board_transform(board)
+        for c, p in enumerate(board):
             x, y = c % W - 1, c // W - 1
             # In either case, y and x should be sane (not off-board)
             if p == 'X':
@@ -697,15 +700,37 @@ def play_and_train(batches_per_game=4, disp=False):
 
     # score here is for black to play (player-to-play from empty_position)
     print(score)
+    if disp:
+        dump_subtree(tree)
     for i in range(batches_per_game):
         net.fit_game(positions, score)
 
+    # fit flipped positions
+    def flip_vert(board):
+        return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
+    print(positions[-1][0].board, flip_vert(positions[-1][0].board))
+    for i in range(batches_per_game):
+        net.fit_game(positions, score, board_transform=flip_vert)
 
-def selfplay(snapshot_interval=100, disp=False):
+    def flip_horiz(board):
+        return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
+    print(positions[-1][0].board, flip_horiz(positions[-1][0].board))
+    for i in range(batches_per_game):
+        net.fit_game(positions, score, board_transform=flip_horiz)
+
+    def flip_both(board):
+        return '\n'.join(reversed([' ' + l[1:][::-1] for l in board[:-1].split('\n')])) + ' '
+    for i in range(batches_per_game):
+        net.fit_game(positions, score, board_transform=flip_both)
+
+    # TODO 90\deg rot
+
+
+def selfplay(snapshot_interval=100, disp=True):
     i = 0
     while True:
         print('Self-play of game #%d ...' % (i,))
-        play_and_train()
+        play_and_train(disp=disp)
         i += 1
         if i % snapshot_interval == 0:
             weights_fname = '%s_%09d.weights.h5' % (net.model_name, i)

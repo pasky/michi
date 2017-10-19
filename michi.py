@@ -878,7 +878,13 @@ def tree_search(tree, n, owner_map, disp=False):
         if i > 0 and i % REPORT_PERIOD == 0:
             print_tree_summary(tree, i, f=sys.stderr)
 
-        score = net.predict_winrate(nodes[-1].pos)
+        last_node = nodes[-1]
+        if last_node.pos.last is None and last_node.pos.last2 is None:
+            score = -1 if last_node.pos.score() > 0 else 1
+            if last_node.pos.n % 2:
+                score = -score
+        else:
+            score = net.predict_winrate(last_node.pos)
 
         tree_update(nodes, amaf_map, score, disp=disp)
 

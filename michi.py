@@ -697,7 +697,7 @@ class AGZeroModel:
         bn_axis = 3
 
         position = Input((N, N, 2))
-        resnet = ResNet()
+        resnet = ResNet(n_stages=N)
         resnet.create(N, N)
         x = resnet.model(position)
 

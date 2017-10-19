@@ -1013,13 +1013,13 @@ def play_and_train(disp=False):
         print_pos(tree.pos, sys.stdout, owner_map)
 
         if tree.pos.last is None and tree.pos.last2 is None:
-            score = 1 if tree.pos.score() > 0 else -1
+            score = -1 if tree.pos.score() > 0 else 1
             if tree.pos.n % 2:
                 score = -score
             break
         if float(tree.w)/tree.v < RESIGN_THRES or tree.pos.n > N*N*2:
-            # score is -1 if black loses
-            score = -1 if tree.pos.n % 2 else 1
+            # score is -1 if white loses
+            score = 1 if tree.pos.n % 2 else -1
             break
 
     print(score)

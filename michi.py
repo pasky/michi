@@ -713,7 +713,7 @@ class AGZeroModel:
         res = Activation('relu')(res)
         res = Flatten()(res)
         res = Dense(256, activation='relu')(res)
-        res = Dense(1, activation='tanh', name='result')(res)
+        res = Dense(1, activation='sigmoid', name='result')(res)
 
         self.model = Model(position, [dist, res])
         self.model.compile('adam', ['categorical_crossentropy', 'binary_crossentropy'])
@@ -724,7 +724,7 @@ class AGZeroModel:
         for pos, dist in positions:
             X.append(self._X_position(pos))
             y_dist.append(dist)
-            y_res.append(result)
+            y_res.append(float(result) / 2 + 0.5)
             if len(X) % self.batch_size == 0:
                 self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
                 X, y_dist, y_res = [], [], []
@@ -740,7 +740,7 @@ class AGZeroModel:
         return self.predict(position)[0][0]
 
     def predict_winrate(self, position):
-        return self.predict(position)[1][0][0]
+        return self.predict(position)[1][0][0] * 2 - 1
 
     def _X_position(self, position):
         my_stones, their_stones = np.zeros((N, N)), np.zeros((N, N))

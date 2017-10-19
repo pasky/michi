@@ -709,13 +709,11 @@ def play_and_train(batches_per_game=4, disp=False):
     # fit flipped positions
     def flip_vert(board):
         return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
-    print(positions[-1][0].board, flip_vert(positions[-1][0].board))
     for i in range(batches_per_game):
         net.fit_game(positions, score, board_transform=flip_vert)
 
     def flip_horiz(board):
         return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
-    print(positions[-1][0].board, flip_horiz(positions[-1][0].board))
     for i in range(batches_per_game):
         net.fit_game(positions, score, board_transform=flip_horiz)
 

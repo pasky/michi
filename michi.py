@@ -53,6 +53,7 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
 N_SIMS = 200
+PUCT_C = 0.1
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
@@ -767,8 +768,8 @@ class TreeNode():
         self.pos = pos
         self.v = 0
         self.w = 0
-        self.pv = PRIOR_EVEN
-        self.pw = PRIOR_EVEN/2
+        self.pv = 0
+        self.pw = 0
         self.av = 0
         self.aw = 0
         self.children = None
@@ -787,12 +788,20 @@ class TreeNode():
             x, y = c % W - 1, c // W - 1
             value = distribution[y, x]
 
-            node.pv += PRIOR_NET
-            node.pw += PRIOR_NET * value
+            node.pv = PRIOR_NET
+            node.pw = PRIOR_NET * value
 
         if not self.children:
             # No possible moves, add a pass move
             self.children.append(TreeNode(self.pos.pass_move()))
+
+    def puct_urgency(self, n0):
+        expectation = float(self.w + PRIOR_EVEN/2) / (self.v + PRIOR_EVEN)
+        try:
+            prior = float(self.pw) / self.pv
+        except:
+            prior = 0.1  # XXX
+        return expectation + PUCT_C * prior * math.sqrt(n0) / (1 + self.v)
 
     def rave_urgency(self):
         v = self.v + self.pv
@@ -825,7 +834,8 @@ def tree_descend(tree, amaf_map, disp=False):
             for c in children:
                 dump_subtree(c, recurse=False)
         random.shuffle(children)  # randomize the max in case of equal urgency
-        node = max(children, key=lambda node: node.rave_urgency())
+        node = max(children, key=lambda node: node.puct_urgency(nodes[-1].v))
+        # node = max(children, key=lambda node: node.rave_urgency())
         nodes.append(node)
 
         if disp:  print('chosen %s' % (str_coord(node.pos.last),), file=sys.stderr)

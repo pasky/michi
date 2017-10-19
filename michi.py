@@ -838,7 +838,7 @@ def tree_descend(tree, amaf_map, disp=False):
 
         # updating visits on the way *down* represents "virtual loss", relevant for parallelization
         node.v += 1
-        if node.children is None and node.v >= EXPAND_VISITS:
+        if node.children is None and node.v > EXPAND_VISITS:
             node.expand()
 
     return nodes

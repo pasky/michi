@@ -1026,7 +1026,7 @@ def play_and_train(disp=False):
     net.fit_game(positions, score)
 
 
-def selfplay(snapshot_interval=20, disp=False):
+def selfplay(snapshot_interval=100, disp=False):
     i = 0
     while True:
         print('Self-play of game #%d ...' % (i,))

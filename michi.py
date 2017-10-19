@@ -480,8 +480,9 @@ def tree_descend(tree, amaf_map, disp=False):
             for c in children:
                 dump_subtree(c, recurse=False)
         random.shuffle(children)  # randomize the max in case of equal urgency
-        node = max(children, key=lambda node: node.puct_urgency(nodes[-1].v))
-        # node = max(children, key=lambda node: node.rave_urgency())
+        dirichlet = np.random.dirichlet((0.03,1), len(children))
+        urgencies = [node.puct_urgency(nodes[-1].v)*0.75 + 0.25*dir[0] for node, dir in zip(children, dirichlet)]
+        node = max(zip(children, urgencies), key=lambda t: t[1])[0]
         nodes.append(node)
 
         if disp:  print('chosen %s' % (str_coord(node.pos.last),), file=sys.stderr)

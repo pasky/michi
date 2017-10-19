@@ -623,7 +623,7 @@ def dump_subtree(node, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
           (indent*' ', str_coord(node.pos.last), node.winrate(),
            node.w, node.v, node.pw, node.pv, node.aw, node.av,
            float(node.aw)/node.av if node.av > 0 else float('nan'),
-           -net.predict_winrate(node.pos)), file=f)
+           float(-net.predict_winrate(node.pos) + 1) / 2), file=f)
     if not recurse:
         return
     for child in sorted(node.children, key=lambda n: n.v, reverse=True):

@@ -1000,8 +1000,8 @@ def play_and_train(disp=False):
                 score = -score
             break
         if float(tree.w)/tree.v < RESIGN_THRES or tree.pos.n > N*N*2:
-            # score is 1 if black wins
-            score = 1 if tree.pos.n % 2 else -1
+            # score is -1 if black loses
+            score = -1 if tree.pos.n % 2 else 0
             break
 
     print_pos(tree.pos, sys.stdout, owner_map)

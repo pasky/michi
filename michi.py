@@ -57,7 +57,7 @@ RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
 PRIOR_NET = 40
-REPORT_PERIOD = 200
+REPORT_PERIOD = 10
 PROB_HEURISTIC = {'capture': 0.9, 'pat3': 0.95}  # probability of heuristic suggestions being taken in playout
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade
@@ -740,7 +740,7 @@ class AGZeroModel:
         return self.predict(position)[0][0]
 
     def predict_winrate(self, position):
-        return self.predict(position)[1][0]
+        return self.predict(position)[1][0][0]
 
     def _X_position(self, position):
         my_stones, their_stones = np.zeros((N, N)), np.zeros((N, N))

@@ -51,7 +51,7 @@ W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 
-N_SIMS = 200
+N_SIMS = 1000
 PUCT_C = 0.1
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
@@ -360,7 +360,6 @@ class AGZeroModel:
 
     def fit_game(self, positions, result):
         X, y_dist, y_res = [], [], []
-        result = -result  # flip result initially as the first position is empty board
         for pos, dist in positions:
             X.append(self._X_position(pos))
             y_dist.append(dist)
@@ -680,9 +679,10 @@ def play_and_train(batches_per_game=4, disp=False):
                 count = -count
             print('Counted score: B%+.1f' % (count,))
             break
-        if float(tree.w)/tree.v < RESIGN_THRES or tree.pos.n > N*N*2:
-            # score is -1 if black resigns
-            score = -1 if tree.pos.n % 2 else 1
+        if float(tree.w)/tree.v < RESIGN_THRES:
+            score = 1  # win for player to-play from this position
+            if tree.pos.n % 2:
+                score = -score
             print('Resign (%d), score: B%+.1f' % (tree.pos.n % 2, score))
 
             count = tree.pos.score()
@@ -690,10 +690,16 @@ def play_and_train(batches_per_game=4, disp=False):
                 count = -count
             print('Counted score: B%+.1f' % (count,))
             break
+        if tree.pos.n > N*N*2:
+            print('Stopping too long a game.')
+            score = 0
+            break
 
+    # score here is for black to play (player-to-play from empty_position)
     print(score)
-    for i in range(batches_per_game):
-        net.fit_game(positions, score)
+    if score != 0:
+        for i in range(batches_per_game):
+            net.fit_game(positions, score)
 
 
 def selfplay(snapshot_interval=100, disp=False):

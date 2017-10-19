@@ -728,6 +728,7 @@ class AGZeroModel:
             if len(X) % self.batch_size == 0:
                 self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
                 X, y_dist, y_res = [], [], []
+            result = -result
         if len(X) > 0:
             self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
 

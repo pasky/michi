@@ -609,11 +609,11 @@ def print_pos(pos, f=sys.stderr, owner_map=None):
 
 def dump_subtree(node, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
     """ print this node and all its children with v >= thres. """
-    print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, urgency %.3f)" %
+    print("%s+- %s %.3f (%d/%d, prior %d/%d, rave %d/%d=%.3f, pred %.3f)" %
           (indent*' ', str_coord(node.pos.last), node.winrate(),
            node.w, node.v, node.pw, node.pv, node.aw, node.av,
            float(node.aw)/node.av if node.av > 0 else float('nan'),
-           node.rave_urgency()), file=f)
+           -net.predict_winrate(node.pos)), file=f)
     if not recurse:
         return
     for child in sorted(node.children, key=lambda n: n.v, reverse=True):
@@ -628,7 +628,7 @@ def print_tree_summary(tree, sims, f=sys.stderr):
     while node is not None:
         best_seq.append(node.pos.last)
         node = node.best_move()
-    best_predwinrate = float(net.predict_winrate(best_nodes[0].pos) + 1) / 2
+    best_predwinrate = float(-net.predict_winrate(best_nodes[0].pos) + 1) / 2
     print('[%4d] winrate %.3f/%.3f | seq %s | can %s' %
           (sims, best_nodes[0].winrate(), best_predwinrate, ' '.join([str_coord(c) for c in best_seq[1:6]]),
            ' '.join(['%s(%.3f|%d/%.3f)' % (str_coord(n.pos.last), n.winrate(), n.v, n.prior()) for n in best_nodes])), file=f)

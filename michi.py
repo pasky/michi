@@ -787,8 +787,8 @@ class TreeNode():
             x, y = c % W - 1, c // W - 1
             value = distribution[y, x]
 
-            node.pv = PRIOR_NET
-            node.pw = PRIOR_NET * value
+            node.pv += PRIOR_NET
+            node.pw += PRIOR_NET * value
 
         if not self.children:
             # No possible moves, add a pass move
@@ -954,7 +954,7 @@ def print_tree_summary(tree, sims, f=sys.stderr):
         node = node.best_move()
     print('[%4d] winrate %.3f | seq %s | can %s' %
           (sims, best_nodes[0].winrate(), ' '.join([str_coord(c) for c in best_seq[1:6]]),
-           ' '.join(['%s(%.3f)' % (str_coord(n.pos.last), n.winrate()) for n in best_nodes])), file=f)
+           ' '.join(['%s(%.3f|%d)' % (str_coord(n.pos.last), n.winrate(), n.v) for n in best_nodes])), file=f)
 
 
 def parse_coord(s):
@@ -986,7 +986,7 @@ def play_and_train(disp=False):
         for child in tree.children:
             if child.pos.last is None:
                 continue  # TODO pass moves
-            p = child.v / tree.v
+            p = float(child.v) / tree.v
             c = child.pos.last
             x, y = c % W - 1, c // W - 1
             distribution[y, x] = p

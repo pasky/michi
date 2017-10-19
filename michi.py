@@ -51,7 +51,7 @@ W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 
-N_SIMS = 1000
+N_SIMS = 200
 PUCT_C = 0.1
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1

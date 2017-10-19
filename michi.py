@@ -52,12 +52,12 @@ empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 MAX_GAME_LEN = N * N * 3
 
-N_SIMS = 100
+N_SIMS = 200
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
 PRIOR_NET = 40
-REPORT_PERIOD = 10
+REPORT_PERIOD = 200
 PROB_HEURISTIC = {'capture': 0.9, 'pat3': 0.95}  # probability of heuristic suggestions being taken in playout
 PROB_SSAREJECT = 0.9  # probability of rejecting suggested self-atari in playout
 PROB_RSAREJECT = 0.5  # probability of rejecting random self-atari in playout; this is lower than above to allow nakade

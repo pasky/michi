@@ -384,6 +384,7 @@ class TreeNode():
             probs = [(float(node.v) / self.v) ** TEMPERATURE for node in self.children]
             probs_tot = sum(probs)
             probs = [p / probs_tot for p in probs]
+            # print([(str_coord(n.pos.last), p, p * probs_tot) for n, p in zip(self.children, probs)])
             i = np.random.choice(len(self.children), p=probs)
             return self.children[i]
         else:
@@ -462,22 +463,8 @@ def tree_search(tree, n, owner_map, disp=False):
         last_node = nodes[-1]
         if last_node.pos.last is None and last_node.pos.last2 is None:
             score = 1 if last_node.pos.score() > 0 else -1
-            #game_score = score
-            #if last_node.pos.n % 2:
-            #    game_score = -game_score
-            #print_pos(last_node.pos, sys.stdout, owner_map)
-            #print('[TREE] Two passes, score: B%+.1f (%d)' % (game_score, score))
-            #count = last_node.pos.score()
-            #if last_node.pos.n % 2:
-            #    count = -count
-            #print('[TREE] Counted score: B%+.1f' % (count,))
         else:
             score = net.predict_winrate(last_node.pos)
-            #print('[TREE] Predicted score: B%+.4f' % (score,))
-            #count = last_node.pos.score()
-            #if last_node.pos.n % 2:
-            #    count = -count
-            #print('[TREE] Counted score: B%+.1f' % (count,))
 
         tree_update(nodes, amaf_map, score, disp=disp)
 
@@ -595,38 +582,42 @@ def play_and_train(i, batches_per_game=4, disp=False):
         positions.append((tree.pos, distribution))
 
         tree = next_tree
-        print_pos(tree.pos, sys.stdout, owner_map)
+        if disp:
+            print_pos(tree.pos, sys.stdout, owner_map)
 
         if tree.pos.last is None and tree.pos.last2 is None:
             score = 1 if tree.pos.score() > 0 else -1
             if tree.pos.n % 2:
                 score = -score
-            print('Two passes, score: B%+.1f' % (score,))
+            if disp:
+                print('Two passes, score: B%+.1f' % (score,))
 
-            count = tree.pos.score()
-            if tree.pos.n % 2:
-                count = -count
-            print('Counted score: B%+.1f' % (count,))
+                count = tree.pos.score()
+                if tree.pos.n % 2:
+                    count = -count
+                print('Counted score: B%+.1f' % (count,))
             break
         if allow_resign and float(tree.w)/tree.v < RESIGN_THRES and tree.v > N_SIMS / 10:
             score = 1  # win for player to-play from this position
             if tree.pos.n % 2:
                 score = -score
-            print('Resign (%d), score: B%+.1f' % (tree.pos.n % 2, score))
+            if disp:
+                print('Resign (%d), score: B%+.1f' % (tree.pos.n % 2, score))
 
-            count = tree.pos.score()
-            if tree.pos.n % 2:
-                count = -count
-            print('Counted score: B%+.1f' % (count,))
+                count = tree.pos.score()
+                if tree.pos.n % 2:
+                    count = -count
+                print('Counted score: B%+.1f' % (count,))
             break
         if tree.pos.n > N*N*2:
-            print('Stopping too long a game.')
+            if disp:
+                print('Stopping too long a game.')
             score = 0
             break
 
     # score here is for black to play (player-to-play from empty_position)
-    print(score)
     if disp:
+        print(score)
         dump_subtree(tree)
     for i in range(batches_per_game):
         net.fit_game(positions, score)
@@ -650,11 +641,11 @@ def play_and_train(i, batches_per_game=4, disp=False):
     # TODO 90\deg rot
 
 
-def selfplay(snapshot_interval=100, disp=True):
+def selfplay(snapshot_interval=100):
     i = 0
     while True:
         print('Self-play of game #%d ...' % (i,))
-        play_and_train(i, disp=disp)
+        play_and_train(i, disp=True)
         i += 1
         if i % snapshot_interval == 0:
             weights_fname = '%s_%09d.weights.h5' % (net.model_name, i)

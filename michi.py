@@ -337,9 +337,9 @@ class AGZeroModel:
     def create(self):
         bn_axis = 3
 
-        position = Input((N, N, 3))
+        position = Input((N, N, 6))
         resnet = ResNet(n_stages=N)
-        resnet.create(N, N, 3)
+        resnet.create(N, N, 6)
         x = resnet.model(position)
 
         dist = Conv2D(2, (1, 1))(x)
@@ -384,7 +384,7 @@ class AGZeroModel:
         return self.predict(position)[1][0][0] * 2 - 1
 
     def _X_position(self, position, board_transform=None):
-        my_stones, their_stones, edge = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
+        my_stones, their_stones, edge, last, last2, to_play = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
         board = position.board
         if board_transform:
             board = board_transform(board)
@@ -395,9 +395,17 @@ class AGZeroModel:
                 my_stones[y, x] = 1
             elif p == 'x':
                 their_stones[y, x] = 1
-            if (x >= 0 and x < N and y >= 0 and y < N) and (x == 0 or x == N-1 or y == 0 or y == N-1):
+            if not (x >= 0 and x < N and y >= 0 and y < N):
+                continue
+            if x == 0 or x == N-1 or y == 0 or y == N-1:
                 edge[y, x] = 1
-        return np.stack((my_stones, their_stones, edge), axis=-1)
+            if position.last == c:
+                last[y, x] = 1
+            if position.last2 == c:
+                last2[y, x] = 1
+            if position.n % 2 == 1:
+                to_play[y, x] = 1
+        return np.stack((my_stones, their_stones, edge, last, last2, to_play), axis=-1)
 
 
 ########################

@@ -363,7 +363,7 @@ class AGZeroModel:
 
     def fit_game(self, positions, result, board_transform=None):
         X, y_dist, y_res = [], [], []
-        for pos, dist in positions:
+        for pos, dist in random.sample(positions, len(positions)):
             X.append(self._X_position(pos, board_transform=board_transform))
             y_dist.append(dist)
             y_res.append(float(result) / 2 + 0.5)

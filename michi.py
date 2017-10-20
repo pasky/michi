@@ -55,6 +55,7 @@ N_SIMS = 200
 PUCT_C = 0.1
 PROPORTIONAL_STAGE = 5
 TEMPERATURE = 0.5
+P_ALLOW_RESIGN = 0.9
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
@@ -668,9 +669,10 @@ def str_coord(c):
 
 # various main programs
 
-def play_and_train(batches_per_game=4, disp=False):
+def play_and_train(i, batches_per_game=4, disp=False):
     positions = []
 
+    allow_resign = i > 20 and np.random.rand() < P_ALLOW_RESIGN
     tree = TreeNode(pos=empty_position())
     tree.expand()
     owner_map = W*W*[0]
@@ -702,7 +704,7 @@ def play_and_train(batches_per_game=4, disp=False):
                 count = -count
             print('Counted score: B%+.1f' % (count,))
             break
-        if float(tree.w)/tree.v < RESIGN_THRES and tree.v > N_SIMS / 10:
+        if allow_resign and float(tree.w)/tree.v < RESIGN_THRES and tree.v > N_SIMS / 10:
             score = 1  # win for player to-play from this position
             if tree.pos.n % 2:
                 score = -score
@@ -748,7 +750,7 @@ def selfplay(snapshot_interval=100, disp=True):
     i = 0
     while True:
         print('Self-play of game #%d ...' % (i,))
-        play_and_train(disp=disp)
+        play_and_train(i, disp=disp)
         i += 1
         if i % snapshot_interval == 0:
             weights_fname = '%s_%09d.weights.h5' % (net.model_name, i)

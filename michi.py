@@ -909,6 +909,8 @@ if __name__ == "__main__":
     global net
     net = AGZeroModel()
     net.create()
+    if len(sys.argv) > 2:
+        net.model.load_weights(sys.argv[2])
     if len(sys.argv) < 2:
         # Default action
         game_io()

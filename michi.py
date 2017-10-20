@@ -53,9 +53,9 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 
 N_SIMS = 200
 PUCT_C = 0.1
-PROPORTIONAL_STAGE = 5
-TEMPERATURE = 0.5
-P_ALLOW_RESIGN = 0.9
+PROPORTIONAL_STAGE = 3
+TEMPERATURE = 2
+P_ALLOW_RESIGN = 0.8
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
@@ -672,7 +672,7 @@ def str_coord(c):
 def play_and_train(i, batches_per_game=4, disp=False):
     positions = []
 
-    allow_resign = i > 20 and np.random.rand() < P_ALLOW_RESIGN
+    allow_resign = i > 100 and np.random.rand() < P_ALLOW_RESIGN
     tree = TreeNode(pos=empty_position())
     tree.expand()
     owner_map = W*W*[0]

@@ -54,6 +54,7 @@ colstr = 'ABCDEFGHJKLMNOPQRST'
 N_SIMS = 200
 PUCT_C = 0.1
 PROPORTIONAL_STAGE = 5
+TEMPERATURE = 0.5
 RAVE_EQUIV = 100
 EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
@@ -467,7 +468,7 @@ class TreeNode():
         if self.children is None:
             return None
         if proportional:
-            probs = [float(node.v) / self.v for node in self.children]
+            probs = [(float(node.v) / self.v) ** TEMPERATURE for node in self.children]
             probs_tot = sum(probs)
             probs = [p / probs_tot for p in probs]
             i = np.random.choice(len(self.children), p=probs)

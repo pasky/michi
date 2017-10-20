@@ -28,14 +28,13 @@ from collections import namedtuple
 from itertools import count
 import math
 import multiprocessing
+from multiprocessing import Process, Queue
 from multiprocessing.pool import Pool
 import numpy as np
 import random
 import re
 import sys
 import time
-
-from michi.net import AGZeroModel
 
 
 # Given a board of size NxN (N=9, 19, ...), we represent the position
@@ -262,6 +261,56 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
 def empty_position():
     """ Return an initial board position """
     return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None, komi=0.5)  #7.5)
+
+
+########################
+# fork safe model wrapper
+
+class ModelServer(Process):
+    def __init__(self, cmd_queue, res_queue, load_weights=None):
+        super(ModelServer, self).__init__()
+        self.cmd_queue = cmd_queue
+        self.res_queue = res_queue
+        self.load_weights = load_weights
+
+    def run(self):
+        try:
+            from michi.net import AGZeroModel
+            net = AGZeroModel(N)
+            net.create()
+            if self.load_weights is not None:
+                net.model.load_weights(self.load_weights)
+
+            while True:
+                cmd, args = self.cmd_queue.get()
+                if cmd == 'fit_game':
+                    net.fit_game(**args)
+                elif cmd == 'predict_distribution':
+                    self.res_queue.put(net.predict_distribution(**args))
+                elif cmd == 'predict_winrate':
+                    self.res_queue.put(net.predict_winrate(**args))
+        except:
+            import traceback
+            traceback.print_exc()
+
+
+class GoModel(object):
+    def __init__(self, load_weights=None):
+        self.cmd_queue = Queue()
+        self.res_queue = Queue()
+        self.server = ModelServer(self.cmd_queue, self.res_queue, load_weights=load_weights)
+        self.server.start()
+
+    def fit_game(self, positions, result, board_transform=None):
+        self.cmd_queue.put(('fit', {'positions': positions, 'result': result, 'board_transform': board_transform}))
+
+    def predict_distribution(self, position):
+        self.cmd_queue.put(('predict_distribution', {'position': position}))
+        return self.res_queue.get()
+
+    def predict_winrate(self, position):
+        self.cmd_queue.put(('predict_winrate', {'position': position}))
+        return self.res_queue.get()
 
 
 ########################
@@ -762,10 +811,7 @@ def gtp_io():
 
 if __name__ == "__main__":
     global net
-    net = AGZeroModel(N)
-    net.create()
-    if len(sys.argv) > 2:
-        net.model.load_weights(sys.argv[2])
+    net = GoModel(load_weights=sys.argv[2] if len(sys.argv) > 2 else Non)
     if len(sys.argv) < 2:
         # Default action
         game_io()

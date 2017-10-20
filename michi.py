@@ -61,7 +61,7 @@ EXPAND_VISITS = 1
 PRIOR_EVEN = 4  # should be even number; 0.5 prior
 PRIOR_NET = 40
 REPORT_PERIOD = 200
-RESIGN_THRES = 0.2
+RESIGN_THRES = 0.05
 
 
 #######################

@@ -332,6 +332,8 @@ class ModelServer(Process):
                         self.process()
 
                 def process(self):
+                    if not self.stash:
+                        return
                     dist, res = net.predict(np.array([s[1] for s in self.stash]))
                     for d, r, s in zip(dist, res, self.stash):
                         kind, _, ri = s

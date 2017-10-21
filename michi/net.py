@@ -10,18 +10,6 @@ from keras.layers.convolutional import Conv2D
 from keras.layers.merge import add
 
 
-def flip_vert(board):
-    return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
-
-
-def flip_horiz(board):
-    return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
-
-
-def flip_both(board):
-    return '\n'.join(reversed([' ' + l[1:][::-1] for l in board[:-1].split('\n')])) + ' '
-
-
 ############################
 # AlphaGo Zero style network
 
@@ -118,10 +106,10 @@ class AGZeroModel:
         self.model.compile('adam', ['categorical_crossentropy', 'binary_crossentropy'])
         self.model.summary()
 
-    def fit_game(self, positions, result, board_transform=None):
+    def fit_game(self, X_positions, result):
         X, y_dist, y_res = [], [], []
-        for pos, dist in random.sample(positions, len(positions)):
-            X.append(self._X_position(pos, board_transform=board_transform))
+        for pos, dist in random.sample(X_positions, len(X_positions)):
+            X.append(pos)
             y_dist.append(dist)
             y_res.append(float(result) / 2 + 0.5)
             if len(X) % self.batch_size == 0:
@@ -131,38 +119,11 @@ class AGZeroModel:
         if len(X) > 0:
             self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
 
-    def predict(self, position):
-        X = self._X_position(position)
-        return self.model.predict(np.array([X]))
+    def predict(self, X_position):
+        return self.model.predict(np.array([X_position]))
 
-    def predict_distribution(self, position):
-        return self.predict(position)[0][0]
+    def predict_distribution(self, X_position):
+        return self.predict(X_position)[0][0]
 
-    def predict_winrate(self, position):
-        return self.predict(position)[1][0][0] * 2 - 1
-
-    def _X_position(self, position, board_transform=None):
-        N = self.N
-        W = N + 2
-        my_stones, their_stones, edge, last, last2, to_play = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
-        board = position.board
-        if board_transform:
-            board = eval(board_transform)(board)
-        for c, p in enumerate(board):
-            x, y = c % W - 1, c // W - 1
-            # In either case, y and x should be sane (not off-board)
-            if p == 'X':
-                my_stones[y, x] = 1
-            elif p == 'x':
-                their_stones[y, x] = 1
-            if not (x >= 0 and x < N and y >= 0 and y < N):
-                continue
-            if x == 0 or x == N-1 or y == 0 or y == N-1:
-                edge[y, x] = 1
-            if position.last == c:
-                last[y, x] = 1
-            if position.last2 == c:
-                last2[y, x] = 1
-            if position.n % 2 == 1:
-                to_play[y, x] = 1
-        return np.stack((my_stones, their_stones, edge, last, last2, to_play), axis=-1)
+    def predict_winrate(self, X_position):
+        return self.predict(X_position)[1][0][0] * 2 - 1

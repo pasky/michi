@@ -266,6 +266,44 @@ def empty_position():
 ########################
 # fork safe model wrapper
 
+
+def flip_vert(board):
+    return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
+
+
+def flip_horiz(board):
+    return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
+
+
+def flip_both(board):
+    return '\n'.join(reversed([' ' + l[1:][::-1] for l in board[:-1].split('\n')])) + ' '
+
+
+def encode_position(position, board_transform=None):
+    my_stones, their_stones, edge, last, last2, to_play = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
+    board = position.board
+    if board_transform:
+        board = eval(board_transform)(board)
+    for c, p in enumerate(board):
+        x, y = c % W - 1, c // W - 1
+        # In either case, y and x should be sane (not off-board)
+        if p == 'X':
+            my_stones[y, x] = 1
+        elif p == 'x':
+            their_stones[y, x] = 1
+        if not (x >= 0 and x < N and y >= 0 and y < N):
+            continue
+        if x == 0 or x == N-1 or y == 0 or y == N-1:
+            edge[y, x] = 1
+        if position.last == c:
+            last[y, x] = 1
+        if position.last2 == c:
+            last2[y, x] = 1
+        if position.n % 2 == 1:
+            to_play[y, x] = 1
+    return np.stack((my_stones, their_stones, edge, last, last2, to_play), axis=-1)
+
+
 class ModelServer(Process):
     def __init__(self, cmd_queue, res_queues, load_weights=None):
         super(ModelServer, self).__init__()
@@ -307,14 +345,15 @@ class GoModel(object):
         self.ri = 0  # id of process in case of multiple processes, to prevent mixups
 
     def fit_game(self, positions, result, board_transform=None):
-        self.cmd_queue.put(('fit', {'positions': positions, 'result': result, 'board_transform': board_transform}, self.ri))
+        X_positions = [encode_position(pos, board_transform=board_transform) for pos in positions]
+        self.cmd_queue.put(('fit_game', {'X_positions': X_positions, 'result': result}, self.ri))
 
     def predict_distribution(self, position):
-        self.cmd_queue.put(('predict_distribution', {'position': position}, self.ri))
+        self.cmd_queue.put(('predict_distribution', {'X_position': encode_position(position)}, self.ri))
         return self.res_queues[self.ri].get()
 
     def predict_winrate(self, position):
-        self.cmd_queue.put(('predict_winrate', {'position': position}, self.ri))
+        self.cmd_queue.put(('predict_winrate', {'X_position': encode_position(position)}, self.ri))
         return self.res_queues[self.ri].get()
 
     def model_name(self):

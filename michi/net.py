@@ -10,6 +10,18 @@ from keras.layers.convolutional import Conv2D
 from keras.layers.merge import add
 
 
+def flip_vert(board):
+    return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
+
+
+def flip_horiz(board):
+    return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
+
+
+def flip_both(board):
+    return '\n'.join(reversed([' ' + l[1:][::-1] for l in board[:-1].split('\n')])) + ' '
+
+
 ############################
 # AlphaGo Zero style network
 
@@ -135,7 +147,7 @@ class AGZeroModel:
         my_stones, their_stones, edge, last, last2, to_play = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
         board = position.board
         if board_transform:
-            board = board_transform(board)
+            board = eval(board_transform)(board)
         for c, p in enumerate(board):
             x, y = c % W - 1, c // W - 1
             # In either case, y and x should be sane (not off-board)

@@ -267,10 +267,10 @@ def empty_position():
 # fork safe model wrapper
 
 class ModelServer(Process):
-    def __init__(self, cmd_queue, res_queue, load_weights=None):
+    def __init__(self, cmd_queue, res_queues, load_weights=None):
         super(ModelServer, self).__init__()
         self.cmd_queue = cmd_queue
-        self.res_queue = res_queue
+        self.res_queues = res_queues
         self.load_weights = load_weights
 
     def run(self):
@@ -282,13 +282,17 @@ class ModelServer(Process):
                 net.model.load_weights(self.load_weights)
 
             while True:
-                cmd, args = self.cmd_queue.get()
+                cmd, args, ri = self.cmd_queue.get()
                 if cmd == 'fit_game':
                     net.fit_game(**args)
                 elif cmd == 'predict_distribution':
-                    self.res_queue.put(net.predict_distribution(**args))
+                    self.res_queues[ri].put(net.predict_distribution(**args))
                 elif cmd == 'predict_winrate':
-                    self.res_queue.put(net.predict_winrate(**args))
+                    self.res_queues[ri].put(net.predict_winrate(**args))
+                elif cmd == 'model_name':
+                    self.res_queues[ri].put(net.model_name)
+                elif cmd == 'save_weights':
+                    net.model.save_weights(args['weights_fname'])
         except:
             import traceback
             traceback.print_exc()
@@ -297,20 +301,28 @@ class ModelServer(Process):
 class GoModel(object):
     def __init__(self, load_weights=None):
         self.cmd_queue = Queue()
-        self.res_queue = Queue()
-        self.server = ModelServer(self.cmd_queue, self.res_queue, load_weights=load_weights)
+        self.res_queues = [Queue() for i in range(128)]
+        self.server = ModelServer(self.cmd_queue, self.res_queues, load_weights=load_weights)
         self.server.start()
+        self.ri = 0  # id of process in case of multiple processes, to prevent mixups
 
     def fit_game(self, positions, result, board_transform=None):
-        self.cmd_queue.put(('fit', {'positions': positions, 'result': result, 'board_transform': board_transform}))
+        self.cmd_queue.put(('fit', {'positions': positions, 'result': result, 'board_transform': board_transform}, self.ri))
 
     def predict_distribution(self, position):
-        self.cmd_queue.put(('predict_distribution', {'position': position}))
-        return self.res_queue.get()
+        self.cmd_queue.put(('predict_distribution', {'position': position}, self.ri))
+        return self.res_queues[self.ri].get()
 
     def predict_winrate(self, position):
-        self.cmd_queue.put(('predict_winrate', {'position': position}))
-        return self.res_queue.get()
+        self.cmd_queue.put(('predict_winrate', {'position': position}, self.ri))
+        return self.res_queues[self.ri].get()
+
+    def model_name(self):
+        self.cmd_queue.put(('model_name', {}, self.ri))
+        return self.res_queues[self.ri].get()
+
+    def save_weights(self, weights_fname):
+        self.cmd_queue.put(('save_weights', {'weights_fname': weights_fname}, self.ri))
 
 
 ########################
@@ -445,7 +457,7 @@ def tree_update(nodes, amaf_map, score, disp=False):
         score = -score
 
 
-def tree_search(tree, n, owner_map, disp=False):
+def tree_search(tree, n, owner_map, disp=False, debug_disp=False):
     """ Perform MCTS search from a given position for a given #iterations """
     # Initialize root node
     if tree.children is None:
@@ -454,10 +466,10 @@ def tree_search(tree, n, owner_map, disp=False):
     i = 0
     while i < n:
         amaf_map = W*W*[0]
-        nodes = tree_descend(tree, amaf_map, disp=disp)
+        nodes = tree_descend(tree, amaf_map, disp=debug_disp)
 
         i += 1
-        if i > 0 and i % REPORT_PERIOD == 0:
+        if disp  and i % REPORT_PERIOD == 0:
             print_tree_summary(tree, i, f=sys.stderr)
 
         last_node = nodes[-1]
@@ -466,11 +478,11 @@ def tree_search(tree, n, owner_map, disp=False):
         else:
             score = net.predict_winrate(last_node.pos)
 
-        tree_update(nodes, amaf_map, score, disp=disp)
+        tree_update(nodes, amaf_map, score, disp=debug_disp)
 
-    if disp:
+    if debug_disp:
         dump_subtree(tree)
-    if i % REPORT_PERIOD != 0:
+    if disp and i % REPORT_PERIOD != 0:
         print_tree_summary(tree, i, f=sys.stderr)
     return tree.best_move(tree.pos.n <= PROPORTIONAL_STAGE)
 
@@ -569,7 +581,7 @@ def play_and_train(i, batches_per_game=4, disp=False):
     owner_map = W*W*[0]
     while True:
         owner_map = W*W*[0]
-        next_tree = tree_search(tree, N_SIMS, owner_map)
+        next_tree = tree_search(tree, N_SIMS, owner_map, disp=disp)
 
         distribution = np.zeros((N, N))
         for child in tree.children:
@@ -623,34 +635,45 @@ def play_and_train(i, batches_per_game=4, disp=False):
         net.fit_game(positions, score)
 
     # fit flipped positions
-    def flip_vert(board):
-        return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
     for i in range(batches_per_game):
-        net.fit_game(positions, score, board_transform=flip_vert)
+        net.fit_game(positions, score, board_transform='flip_vert')
 
-    def flip_horiz(board):
-        return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
     for i in range(batches_per_game):
-        net.fit_game(positions, score, board_transform=flip_horiz)
+        net.fit_game(positions, score, board_transform='flip_horiz')
 
-    def flip_both(board):
-        return '\n'.join(reversed([' ' + l[1:][::-1] for l in board[:-1].split('\n')])) + ' '
     for i in range(batches_per_game):
-        net.fit_game(positions, score, board_transform=flip_both)
+        net.fit_game(positions, score, board_transform='flip_both')
 
     # TODO 90\deg rot
 
 
-def selfplay(snapshot_interval=100):
+def selfplay_singlethread(worker_id, disp=False, snapshot_interval=100):
+    net.ri = worker_id
+
     i = 0
     while True:
-        print('Self-play of game #%d ...' % (i,))
-        play_and_train(i, disp=True)
+        print('[%d] Self-play of game #%d ...' % (worker_id, i,))
+        play_and_train(i, disp=disp)
         i += 1
-        if i % snapshot_interval == 0:
-            weights_fname = '%s_%09d.weights.h5' % (net.model_name, i)
+        if snapshot_interval and i % snapshot_interval == 0:
+            weights_fname = '%s_%09d.weights.h5' % (net.model_name(), i)
             print(weights_fname)
-            net.model.save_weights(weights_fname)
+            net.save_weights(weights_fname)
+
+
+def selfplay(disp=True, snapshot_interval=100):
+    n_workers = multiprocessing.cpu_count()
+
+    # First process is verbose and snapshots the model
+    processes = [Process(target=selfplay_singlethread, kwargs=dict(worker_id=0, disp=disp))]
+    # The rest work silently
+    for i in range(1, n_workers):
+        processes.append(Process(target=selfplay_singlethread, kwargs=dict(worker_id=i, snapshot_interval=None)))
+
+    for p in processes:
+        p.start()
+    for p in processes:
+        p.join()
 
 
 def game_io(computer_black=False):
@@ -802,7 +825,7 @@ def gtp_io():
 
 if __name__ == "__main__":
     global net
-    net = GoModel(load_weights=sys.argv[2] if len(sys.argv) > 2 else Non)
+    net = GoModel(load_weights=sys.argv[2] if len(sys.argv) > 2 else None)
     if len(sys.argv) < 2:
         # Default action
         game_io()

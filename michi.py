@@ -319,17 +319,40 @@ class ModelServer(Process):
             if self.load_weights is not None:
                 net.model.load_weights(self.load_weights)
 
+            class PredictStash(object):
+                """ prediction batcher """
+                def __init__(self, trigger, res_queues):
+                    self.stash = []
+                    self.trigger = trigger  # XXX must not be higher than #workers
+                    self.res_queues = res_queues
+
+                def add(self, kind, X_pos, ri):
+                    self.stash.append((kind, X_pos, ri))
+                    if len(self.stash) >= self.trigger:
+                        self.process()
+
+                def process(self):
+                    dist, res = net.predict(np.array([s[1] for s in self.stash]))
+                    for d, r, s in zip(dist, res, self.stash):
+                        kind, _, ri = s
+                        self.res_queues[ri].put(d if kind == 0 else r)
+                    self.stash = []
+
+            stash = PredictStash(4, self.res_queues)
+
             while True:
                 cmd, args, ri = self.cmd_queue.get()
                 if cmd == 'fit_game':
+                    stash.process()
                     net.fit_game(**args)
                 elif cmd == 'predict_distribution':
-                    self.res_queues[ri].put(net.predict_distribution(**args))
+                    stash.add(0, args['X_position'], ri)
                 elif cmd == 'predict_winrate':
-                    self.res_queues[ri].put(net.predict_winrate(**args))
+                    stash.add(1, args['X_position'], ri)
                 elif cmd == 'model_name':
                     self.res_queues[ri].put(net.model_name)
                 elif cmd == 'save_weights':
+                    stash.process()
                     net.model.save_weights(args['weights_fname'])
         except:
             import traceback

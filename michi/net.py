@@ -119,11 +119,7 @@ class AGZeroModel:
         if len(X) > 0:
             self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
 
-    def predict(self, X_position):
-        return self.model.predict(np.array([X_position]))
-
-    def predict_distribution(self, X_position):
-        return self.predict(X_position)[0][0]
-
-    def predict_winrate(self, X_position):
-        return self.predict(X_position)[1][0][0] * 2 - 1
+    def predict(self, X_positions):
+        dist, res = self.model.predict(X_positions)
+        res = np.array([r[0] * 2 - 1 for r in res])
+        return [dist, res]

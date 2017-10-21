@@ -368,7 +368,7 @@ class GoModel(object):
         self.ri = 0  # id of process in case of multiple processes, to prevent mixups
 
     def fit_game(self, positions, result, board_transform=None):
-        X_positions = [encode_position(pos, board_transform=board_transform) for pos in positions]
+        X_positions = [(encode_position(pos, board_transform=board_transform), dist) for pos, dist in positions]
         self.cmd_queue.put(('fit_game', {'X_positions': X_positions, 'result': result}, self.ri))
 
     def predict_distribution(self, position):

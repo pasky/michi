@@ -1,5 +1,7 @@
 from __future__ import print_function
 
+import itertools
+import joblib
 import numpy as np
 import random
 import time
@@ -73,9 +75,13 @@ class ResNet(object):
 
 
 class AGZeroModel:
-    def __init__(self, N, batch_size=32):
+    def __init__(self, N, batch_size=32, archive_fit_samples=48):
         self.N = N
         self.batch_size = 32
+
+        self.archive_fit_samples = archive_fit_samples
+        self.position_archive = []
+
         self.model_name = time.strftime('G%y%m%dT%H%M%S')
         print(self.model_name)
 
@@ -107,8 +113,19 @@ class AGZeroModel:
         self.model.summary()
 
     def fit_game(self, X_positions, result):
+        self.position_archive.extend(X_positions)
+
+        if len(self.position_archive) >= self.archive_fit_samples:
+            archive_samples = random.sample(self.position_archive, self.archive_fit_samples)
+        else:
+            # initial case
+            archive_samples = self.position_archive
+        # I'm going to some lengths to avoid the potentially overloaded + operator
+        X_fit_samples = list(itertools.chain(X_positions, archive_samples))
+        X_shuffled = random.sample(X_fit_samples, len(X_fit_samples))
+
         X, y_dist, y_res = [], [], []
-        for pos, dist in random.sample(X_positions, len(X_positions)):
+        for pos, dist in X_shuffled:
             X.append(pos)
             y_dist.append(dist)
             y_res.append(float(result) / 2 + 0.5)
@@ -126,6 +143,13 @@ class AGZeroModel:
 
     def save(self, snapshot_id):
         self.model.save_weights('%s.weights.h5' % (snapshot_id,))
+        joblib.dump(self.position_archive, '%s.archive.joblib' % (snapshot_id,), compress=5)
 
     def load(self, snapshot_id):
         self.model.load_weights('%s.weights.h5' % (snapshot_id,))
+
+        pos_fname = '%s.archive.joblib' % (snapshot_id,)
+        try:
+            self.position_archive = joblib.load(pos_fname)
+        except:
+            print('Warning: Cannot load position archive %s' % (pos_fname,))

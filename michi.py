@@ -157,9 +157,6 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     def move(self, c):
         """ play as player X at the given coord c, return the new position """
 
-        # Test for ko
-        if c == self.ko:
-            return None
         # Are we trying to play in enemy's eye?
         in_enemy_eye = is_eyeish(self.board, c) == 'x'
 
@@ -182,20 +179,22 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
                 singlecaps.append(d)
             capX += capcount
             board = fboard.replace('#', '.')  # capture the group
-        # Set ko
-        ko = singlecaps[0] if in_enemy_eye and len(singlecaps) == 1 else None
         # Test for suicide
         if contact(floodfill(board, c), '.') is None:
             return None
 
+        # Test for (positional super)ko
+        if board in self.ko or board.swapcase() in self.ko:
+            return None
+
         # Update the position and return
         return Position(board=board.swapcase(), cap=(self.cap[1], capX),
-                        n=self.n + 1, ko=ko, last=c, last2=self.last, komi=self.komi)
+                        n=self.n + 1, ko=self.ko | { board }, last=c, last2=self.last, komi=self.komi)
 
     def pass_move(self):
         """ pass - i.e. return simply a flipped position """
         return Position(board=self.board.swapcase(), cap=(self.cap[1], self.cap[0]),
-                        n=self.n + 1, ko=None, last=None, last2=self.last, komi=self.komi)
+                        n=self.n + 1, ko=self.ko, last=None, last2=self.last, komi=self.komi)
 
     def moves(self, i0):
         """ Generate a list of moves (includes false positives - suicide moves;
@@ -260,7 +259,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
 
 def empty_position():
     """ Return an initial board position """
-    return Position(board=empty, cap=(0, 0), n=0, ko=None, last=None, last2=None, komi=0.5)  #7.5)
+    return Position(board=empty, cap=(0, 0), n=0, ko=set(), last=None, last2=None, komi=0.5)  #7.5)
 
 
 ########################

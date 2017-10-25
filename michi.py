@@ -420,14 +420,23 @@ class TreeNode():
             self.children.append(node)
 
             x, y = c % W - 1, c // W - 1
-            value = distribution[y, x]
+            value = distribution[y * N + x]
 
             node.pv = PRIOR_NET
             node.pw = PRIOR_NET * value
 
+        # Add also a pass move - but only if this doesn't trigger a losing
+        # scoring (or we have no other option)
         if not self.children:
-            # No possible moves, add a pass move
-            self.children.append(TreeNode(self.pos.pass_move()))
+            can_pass = True
+        else:
+            can_pass = self.pos.score() >= 0
+
+        if can_pass:
+            node = TreeNode(self.pos.pass_move())
+            self.children.append(node)
+            node.pv = PRIOR_NET
+            node.pw = PRIOR_NET * distribution[-1]
 
     def puct_urgency(self, n0):
         expectation = float(self.w + PRIOR_EVEN/2) / (self.v + PRIOR_EVEN)
@@ -647,14 +656,15 @@ def play_and_train(i, batches_per_game=4, disp=False):
         owner_map = W*W*[0]
         next_tree = tree_search(tree, N_SIMS, owner_map, disp=disp)
 
-        distribution = np.zeros((N, N))
+        distribution = np.zeros(N * N + 1)
         for child in tree.children:
-            if child.pos.last is None:
-                continue  # TODO pass moves
             p = float(child.v) / tree.v
             c = child.pos.last
-            x, y = c % W - 1, c // W - 1
-            distribution[y, x] = p
+            if c is not None:
+                x, y = c % W - 1, c // W - 1
+                distribution[y * N + x] = p
+            else:
+                distribution[-1] = p
         positions.append((tree.pos, distribution))
 
         tree = next_tree

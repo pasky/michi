@@ -98,8 +98,7 @@ class AGZeroModel:
         dist = BatchNormalization(axis=bn_axis)(dist)
         dist = Activation('relu')(dist)
         dist = Flatten()(dist)
-        dist = Dense(N * N, activation='softmax')(dist)
-        dist = Reshape((N, N), name='distribution')(dist)
+        dist = Dense(N * N + 1, activation='softmax', name='distribution')(dist)
 
         res = Conv2D(1, (1, 1))(x)
         res = BatchNormalization(axis=bn_axis)(res)

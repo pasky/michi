@@ -47,7 +47,7 @@ W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 
-N_SIMS = 400
+N_SIMS = 1000
 PUCT_C = 0.1
 PROPORTIONAL_STAGE = 3
 TEMPERATURE = 2
@@ -721,7 +721,7 @@ def play_and_train(i, batches_per_game=4, disp=False):
     # TODO 90\deg rot
 
 
-def selfplay_singlethread(worker_id, disp=False, snapshot_interval=100):
+def selfplay_singlethread(worker_id, disp=False, snapshot_interval=25):
     net.ri = worker_id
 
     i = 0

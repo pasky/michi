@@ -123,3 +123,6 @@ class AGZeroModel:
         dist, res = self.model.predict(X_positions)
         res = np.array([r[0] * 2 - 1 for r in res])
         return [dist, res]
+
+    def save(self, snapshot_id):
+        self.model.save_weights('%s.weights.h5' % (snapshot_id,))

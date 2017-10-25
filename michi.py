@@ -353,9 +353,9 @@ class ModelServer(Process):
                     stash.add(1, args['X_position'], ri)
                 elif cmd == 'model_name':
                     self.res_queues[ri].put(net.model_name)
-                elif cmd == 'save_weights':
+                elif cmd == 'save':
                     stash.process()
-                    net.model.save_weights(args['weights_fname'])
+                    net.save(args['snapshot_id'])
         except:
             import traceback
             traceback.print_exc()
@@ -385,8 +385,8 @@ class GoModel(object):
         self.cmd_queue.put(('model_name', {}, self.ri))
         return self.res_queues[self.ri].get()
 
-    def save_weights(self, weights_fname):
-        self.cmd_queue.put(('save_weights', {'weights_fname': weights_fname}, self.ri))
+    def save(self, snapshot_id):
+        self.cmd_queue.put(('save', {'snapshot_id': snapshot_id}, self.ri))
 
 
 ########################
@@ -720,9 +720,9 @@ def selfplay_singlethread(worker_id, disp=False, snapshot_interval=100):
         play_and_train(i, disp=disp)
         i += 1
         if snapshot_interval and i % snapshot_interval == 0:
-            weights_fname = '%s_%09d.weights.h5' % (net.model_name(), i)
-            print(weights_fname)
-            net.save_weights(weights_fname)
+            snapshot_id = '%s_%09d' % (net.model_name(), i)
+            print(snapshot_id)
+            net.save(snapshot_id)
 
 
 def selfplay(disp=True, snapshot_interval=100):

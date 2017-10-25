@@ -113,7 +113,12 @@ class AGZeroModel:
         self.model.summary()
 
     def fit_game(self, X_positions, result):
-        self.position_archive.extend(X_positions)
+        X_posres = []
+        for pos, dist in X_positions:
+            X_posres.append((pos, dist, result))
+            result = -result
+
+        self.position_archive.extend(X_posres)
 
         if len(self.position_archive) >= self.archive_fit_samples:
             archive_samples = random.sample(self.position_archive, self.archive_fit_samples)
@@ -121,18 +126,17 @@ class AGZeroModel:
             # initial case
             archive_samples = self.position_archive
         # I'm going to some lengths to avoid the potentially overloaded + operator
-        X_fit_samples = list(itertools.chain(X_positions, archive_samples))
+        X_fit_samples = list(itertools.chain(X_posres, archive_samples))
         X_shuffled = random.sample(X_fit_samples, len(X_fit_samples))
 
         X, y_dist, y_res = [], [], []
-        for pos, dist in X_shuffled:
+        for pos, dist, res in X_shuffled:
             X.append(pos)
             y_dist.append(dist)
-            y_res.append(float(result) / 2 + 0.5)
+            y_res.append(float(res) / 2 + 0.5)
             if len(X) % self.batch_size == 0:
                 self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
                 X, y_dist, y_res = [], [], []
-            result = -result
         if len(X) > 0:
             self.model.train_on_batch(np.array(X), [np.array(y_dist), np.array(y_res)])
 

@@ -601,7 +601,7 @@ def dump_subtree(node, thres=N_SIMS/50, indent=0, f=sys.stderr, recurse=True):
            node.w, node.v, node.pw, node.pv, node.aw, node.av,
            float(node.aw)/node.av if node.av > 0 else float('nan'),
            float(-net.predict_winrate(node.pos) + 1) / 2), file=f)
-    if not recurse:
+    if not recurse or not node.children:
         return
     for child in sorted(node.children, key=lambda n: n.v, reverse=True):
         if child.v >= thres:
@@ -725,7 +725,7 @@ def selfplay_singlethread(worker_id, disp=False, snapshot_interval=100):
             net.save(snapshot_id)
 
 
-def selfplay(disp=True, snapshot_interval=100):
+def selfplay(disp=True):
     n_workers = multiprocessing.cpu_count()
 
     # First process is verbose and snapshots the model

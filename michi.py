@@ -305,19 +305,19 @@ def encode_position(position, board_transform=None):
 
 
 class ModelServer(Process):
-    def __init__(self, cmd_queue, res_queues, load_weights=None):
+    def __init__(self, cmd_queue, res_queues, load_snapshot=None):
         super(ModelServer, self).__init__()
         self.cmd_queue = cmd_queue
         self.res_queues = res_queues
-        self.load_weights = load_weights
+        self.load_snapshot = load_snapshot
 
     def run(self):
         try:
             from michi.net import AGZeroModel
             net = AGZeroModel(N)
             net.create()
-            if self.load_weights is not None:
-                net.model.load_weights(self.load_weights)
+            if self.load_snapshot is not None:
+                net.load(self.load_snapshot)
 
             class PredictStash(object):
                 """ prediction batcher """
@@ -362,10 +362,10 @@ class ModelServer(Process):
 
 
 class GoModel(object):
-    def __init__(self, load_weights=None):
+    def __init__(self, load_snapshot=None):
         self.cmd_queue = Queue()
         self.res_queues = [Queue() for i in range(128)]
-        self.server = ModelServer(self.cmd_queue, self.res_queues, load_weights=load_weights)
+        self.server = ModelServer(self.cmd_queue, self.res_queues, load_snapshot=load_snapshot)
         self.server.start()
         self.ri = 0  # id of process in case of multiple processes, to prevent mixups
 
@@ -889,7 +889,7 @@ def gtp_io():
 
 if __name__ == "__main__":
     global net
-    net = GoModel(load_weights=sys.argv[2] if len(sys.argv) > 2 else None)
+    net = GoModel(load_snapshot=sys.argv[2] if len(sys.argv) > 2 else None)
     if len(sys.argv) < 2:
         # Default action
         game_io()

@@ -126,3 +126,6 @@ class AGZeroModel:
 
     def save(self, snapshot_id):
         self.model.save_weights('%s.weights.h5' % (snapshot_id,))
+
+    def load(self, snapshot_id):
+        self.model.load_weights('%s.weights.h5' % (snapshot_id,))

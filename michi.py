@@ -339,11 +339,14 @@ class ModelServer(Process):
                         self.res_queues[ri].put(d if kind == 0 else r)
                     self.stash = []
 
-            stash = PredictStash(4, self.res_queues)
+            stash = PredictStash(1, self.res_queues)
 
             while True:
                 cmd, args, ri = self.cmd_queue.get()
-                if cmd == 'fit_game':
+                if cmd == 'stash_size':
+                    stash.process()
+                    stash.trigger = args['stash_size']
+                elif cmd == 'fit_game':
                     stash.process()
                     net.fit_game(**args)
                 elif cmd == 'predict_distribution':
@@ -367,6 +370,9 @@ class GoModel(object):
         self.server = ModelServer(self.cmd_queue, self.res_queues, load_snapshot=load_snapshot)
         self.server.start()
         self.ri = 0  # id of process in case of multiple processes, to prevent mixups
+
+    def stash_size(self, stash_size):
+        self.cmd_queue.put(('stash_size', {'stash_size': stash_size}, self.ri))
 
     def fit_game(self, positions, result, board_transform=None):
         X_positions = [(encode_position(pos, board_transform=board_transform), dist) for pos, dist in positions]
@@ -736,6 +742,9 @@ def selfplay_singlethread(worker_id, disp=False, snapshot_interval=25):
 
 def selfplay(disp=True):
     n_workers = multiprocessing.cpu_count()
+
+    # group up parallel predict requests
+    net.stash_size(max(n_workers - 1, 1))
 
     # First process is verbose and snapshots the model
     processes = [Process(target=selfplay_singlethread, kwargs=dict(worker_id=0, disp=disp))]

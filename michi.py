@@ -42,7 +42,7 @@ import time
 # 'x' (other player), and whitespace (off-board border to make rules
 # implementation easier).  Coordinates are just indices in this string.
 # You can simply print(board) when debugging.
-N = 5
+N = 7
 W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
@@ -259,7 +259,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
 
 def empty_position():
     """ Return an initial board position """
-    return Position(board=empty, cap=(0, 0), n=0, ko=set(), last=None, last2=None, komi=0.5)  #7.5)
+    return Position(board=empty, cap=(0, 0), n=0, ko=set(), last=None, last2=None, komi=7.5)
 
 
 ########################

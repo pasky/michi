@@ -927,3 +927,6 @@ if __name__ == "__main__":
         selfplay()
     else:
         print('Unknown action', file=sys.stderr)
+
+    net.server.terminate()
+    net.server.join()

@@ -793,7 +793,7 @@ def game_io(computer_black=False):
             print_pos(tree.pos)
 
         owner_map = W*W*[0]
-        tree = tree_search(tree, N_SIMS, owner_map)
+        tree = tree_search(tree, N_SIMS, owner_map, disp=True)
         if tree.pos.last is None and tree.pos.last2 is None:
             score = tree.pos.score()
             if tree.pos.n % 2:
@@ -908,11 +908,13 @@ def gtp_io():
 if __name__ == "__main__":
     global net
     net = GoModel(load_snapshot=sys.argv[2] if len(sys.argv) > 2 else None)
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or sys.argv[1] == "black":
         # Default action
-        game_io()
+        while True:
+            game_io()
     elif sys.argv[1] == "white":
-        game_io(computer_black=True)
+        while True:
+            game_io(computer_black=True)
     elif sys.argv[1] == "gtp":
         gtp_io()
     elif sys.argv[1] == "tsbenchmark":

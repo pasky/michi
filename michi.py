@@ -705,7 +705,7 @@ def play_and_train(i, batches_per_game=4, disp=False):
                     count = -count
                 print('Counted score: B%+.1f' % (count,))
             break
-        if allow_resign and float(tree.w)/tree.v < RESIGN_THRES and tree.v > N_SIMS / 10:
+        if allow_resign and float(tree.w)/tree.v < RESIGN_THRES and tree.v > N_SIMS / 10 and tree.pos.n > 10:
             score = 1  # win for player to-play from this position
             if tree.pos.n % 2:
                 score = -score
@@ -817,7 +817,7 @@ def game_io(computer_black=False):
                 score = -score
             print('Game over, score: B%+.1f' % (score,))
             break
-        if float(tree.w)/tree.v < RESIGN_THRES:
+        if float(tree.w)/tree.v < RESIGN_THRES and tree.pos.n > 10:
             print('I resign.')
             break
     print('Thank you for the game!')
@@ -881,7 +881,7 @@ def gtp_io():
             tree = tree_search(tree, N_SIMS, owner_map)
             if tree.pos.last is None:
                 ret = 'pass'
-            elif float(tree.w)/tree.v < RESIGN_THRES:
+            elif float(tree.w)/tree.v < RESIGN_THRES and tree.pos.n > 10:
                 ret = 'resign'
             else:
                 ret = str_coord(tree.pos.last)

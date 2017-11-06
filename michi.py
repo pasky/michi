@@ -25,7 +25,8 @@
 
 from __future__ import print_function
 from collections import namedtuple
-from itertools import count
+from itertools import chain, count
+from joblib import Parallel, delayed
 import math
 import multiprocessing
 from multiprocessing import Process, Queue
@@ -42,12 +43,12 @@ import time
 # 'x' (other player), and whitespace (off-board border to make rules
 # implementation easier).  Coordinates are just indices in this string.
 # You can simply print(board) when debugging.
-N = 7
+N = 19
 W = N + 2
 empty = "\n".join([(N+1)*' '] + N*[' '+N*'.'] + [(N+2)*' '])
 colstr = 'ABCDEFGHJKLMNOPQRST'
 
-N_SIMS = 1000
+N_SIMS = 100
 PUCT_C = 0.1
 PROPORTIONAL_STAGE = 3
 TEMPERATURE = 2
@@ -497,6 +498,18 @@ class TreeNode():
         else:
             return max(self.children, key=lambda node: node.v)
 
+    def distribution(self):
+        distribution = np.zeros(N * N + 1)
+        for child in self.children:
+            p = float(child.v) / self.v
+            c = child.pos.last
+            if c is not None:
+                x, y = c % W - 1, c // W - 1
+                distribution[y * N + x] = p
+            else:
+                distribution[-1] = p
+        return distribution
+
 
 def tree_descend(tree, amaf_map, disp=False):
     """ Descend through the tree to a leaf """
@@ -677,17 +690,7 @@ def play_and_train(i, batches_per_game=1, disp=False):
     while True:
         owner_map = W*W*[0]
         next_tree = tree_search(tree, N_SIMS, owner_map, disp=disp)
-
-        distribution = np.zeros(N * N + 1)
-        for child in tree.children:
-            p = float(child.v) / tree.v
-            c = child.pos.last
-            if c is not None:
-                x, y = c % W - 1, c // W - 1
-                distribution[y * N + x] = p
-            else:
-                distribution[-1] = p
-        positions.append((tree.pos, distribution))
+        positions.append((tree.pos, tree.distribution()))
 
         tree = next_tree
         if disp:
@@ -773,6 +776,79 @@ def selfplay(disp=True):
         p.start()
     for p in processes:
         p.join()
+
+
+def gather_positions(filename, subsample=16):
+    from gomill import sgf
+    with open(filename) as f:
+        g = sgf.Sgf_game.from_string(f.read())
+        if g.get_size() != N:
+            raise ValueError('size mismatch')
+        if g.get_handicap() is not None:
+            raise ValueError('handicap game')
+
+        score = 1 if g.get_winner() == 'B' else -1
+
+        pos_to_play = [[], []]  # black-to-play, white-to-play
+        pos = empty_position()
+        for node in g.get_main_sequence()[1:]:
+            color, move = node.get_move()
+            if move is not None:
+                c = (move[0]+1) * W + move[1]+1
+                pos = pos.move(c)
+            else:
+                pos = pos.pass_move()
+            if pos is None:
+                raise ValueError('invalid move %s' % (move,))
+            pos_to_play[pos.n % 2].append(pos)
+
+    # subsample positions
+    pos_to_play = [random.sample(pos_to_play[0], subsample//2), random.sample(pos_to_play[1], subsample//2)]
+    # alternate positions and randomly rotate
+    positions = list(chain(*zip(*pos_to_play)))
+    positions = [pos.flip_random() for pos in positions]
+    return (positions, score)
+
+
+def position_dist(worker_id, pos, disp=False):
+    net.ri = worker_id
+
+    tree = TreeNode(pos=pos)
+    tree.expand()
+    owner_map = W*W*[0]
+    tree_search(tree, N_SIMS, owner_map, disp=disp)
+    return tree.distribution()
+
+
+def replay_train(snapshot_interval=500, disp=True):
+    n_workers = multiprocessing.cpu_count()
+    # group up parallel predict requests
+    # net.stash_size(max(2, 1))  # XXX not all workers will always be busy
+
+    for i, f in enumerate(sys.stdin):
+        f = f.rstrip()
+        print('[%d] %s' % (i, f))
+        try:
+            positions, score = gather_positions(f, subsample=16)
+        except ValueError:
+            print('SKIP')
+            import traceback
+            traceback.print_exc()
+            continue
+        dist = Parallel(n_jobs=n_workers, verbose=100)(delayed(position_dist)(i, pos, disp) for i, pos in enumerate(positions))
+        X_positions = list(zip(positions, dist))
+        if disp:
+            print_pos(X_positions[0][0], sys.stdout, None)
+        net.fit_game(X_positions, score)
+
+        if snapshot_interval and i > 0 and i % snapshot_interval == 0:
+            snapshot_id = '%s_R%09d' % (net.model_name(), i)
+            print(snapshot_id)
+            net.save(snapshot_id)
+
+    snapshot_id = '%s_Rfinal' % (net.model_name(),)
+    print(snapshot_id)
+    net.save(snapshot_id)
 
 
 def game_io(computer_black=False):
@@ -944,6 +1020,9 @@ if __name__ == "__main__":
         print_pos(tree_search(TreeNode(pos=empty_position()), N_SIMS, W*W*[0], disp=True).pos)
     elif sys.argv[1] == "selfplay":
         selfplay()
+    elif sys.argv[1] == "replay_train":
+        # find GoGoD-2008-Winter-Database/ -name '*.sgf' | shuf | python ./michi.py replay_train
+        replay_train()
     else:
         print('Unknown action', file=sys.stderr)
 

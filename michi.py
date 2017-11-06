@@ -256,6 +256,35 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
                 owner_map[c] += n * (1 if self.n % 2 == 0 else -1)
         return board.count('X') - board.count('x') + komi
 
+    def flip_vert(self):
+        board = '\n'.join(reversed(self.board[:-1].split('\n'))) + ' '
+        def coord_flip_vert(c):
+            return (W-1 - c // W) * W + c % W
+        # XXX: Doesn't update ko properly
+        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_vert(self.last), last2=coord_flip_vert(self.last2), komi=self.komi)
+
+    def flip_horiz(self):
+        board = '\n'.join([' ' + l[1:][::-1] for l in self.board.split('\n')])
+        def coord_flip_horiz(c):
+            return c // W * W + (W-1 - c % W)
+        # XXX: Doesn't update ko properly
+        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_horiz(self.last), last2=coord_flip_horiz(self.last2), komi=self.komi)
+
+    def flip_both(self):
+        board = '\n'.join(reversed([' ' + l[1:][::-1] for l in self.board[:-1].split('\n')])) + ' '
+        def coord_flip_both(c):
+            return (W-1 - c // W) * W + (W-1 - c % W)
+        # XXX: Doesn't update ko properly
+        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_both(self.last), last2=coord_flip_both(self.last2), komi=self.komi)
+
+    def flip_random(self):
+        pos = self
+        if random.random() < 0.5:
+            pos = pos.flip_vert()
+        if random.random() < 0.5:
+            pos = pos.flip_horiz()
+        return pos
+
 
 def empty_position():
     """ Return an initial board position """
@@ -266,23 +295,11 @@ def empty_position():
 # fork safe model wrapper
 
 
-def flip_vert(board):
-    return '\n'.join(reversed(board[:-1].split('\n'))) + ' '
-
-
-def flip_horiz(board):
-    return '\n'.join([' ' + l[1:][::-1] for l in board.split('\n')])
-
-
-def flip_both(board):
-    return '\n'.join(reversed([' ' + l[1:][::-1] for l in board[:-1].split('\n')])) + ' '
-
-
 def encode_position(position, board_transform=None):
     my_stones, their_stones, edge, last, last2, to_play = np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N)), np.zeros((N, N))
-    board = position.board
     if board_transform:
-        board = eval(board_transform)(board)
+        position = eval('Position.' + board_transform)(position)
+    board = position.board
     for c, p in enumerate(board):
         x, y = c % W - 1, c // W - 1
         # In either case, y and x should be sane (not off-board)

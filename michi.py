@@ -260,6 +260,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     def flip_vert(self):
         board = '\n'.join(reversed(self.board[:-1].split('\n'))) + ' '
         def coord_flip_vert(c):
+            if c is None:  return None
             return (W-1 - c // W) * W + c % W
         # XXX: Doesn't update ko properly
         return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_vert(self.last), last2=coord_flip_vert(self.last2), komi=self.komi)
@@ -267,6 +268,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     def flip_horiz(self):
         board = '\n'.join([' ' + l[1:][::-1] for l in self.board.split('\n')])
         def coord_flip_horiz(c):
+            if c is None:  return None
             return c // W * W + (W-1 - c % W)
         # XXX: Doesn't update ko properly
         return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_horiz(self.last), last2=coord_flip_horiz(self.last2), komi=self.komi)
@@ -274,6 +276,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
     def flip_both(self):
         board = '\n'.join(reversed([' ' + l[1:][::-1] for l in self.board[:-1].split('\n')])) + ' '
         def coord_flip_both(c):
+            if c is None:  return None
             return (W-1 - c // W) * W + (W-1 - c % W)
         # XXX: Doesn't update ko properly
         return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_both(self.last), last2=coord_flip_both(self.last2), komi=self.komi)

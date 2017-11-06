@@ -151,7 +151,7 @@ def is_eye(board, c):
     return eyecolor
 
 
-class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
+class Position(namedtuple('Position', 'board cap n ko last last2 komi data')):
     """ Implementation of simple Chinese Go rules;
     n is how many moves were played so far """
 
@@ -190,12 +190,12 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
 
         # Update the position and return
         return Position(board=board.swapcase(), cap=(self.cap[1], capX),
-                        n=self.n + 1, ko=self.ko | { board }, last=c, last2=self.last, komi=self.komi)
+                        n=self.n + 1, ko=self.ko | { board }, last=c, last2=self.last, komi=self.komi, data=dict())
 
     def pass_move(self):
         """ pass - i.e. return simply a flipped position """
         return Position(board=self.board.swapcase(), cap=(self.cap[1], self.cap[0]),
-                        n=self.n + 1, ko=self.ko, last=None, last2=self.last, komi=self.komi)
+                        n=self.n + 1, ko=self.ko, last=None, last2=self.last, komi=self.komi, data=dict())
 
     def moves(self, i0):
         """ Generate a list of moves (includes false positives - suicide moves;
@@ -263,7 +263,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             if c is None:  return None
             return (W-1 - c // W) * W + c % W
         # XXX: Doesn't update ko properly
-        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_vert(self.last), last2=coord_flip_vert(self.last2), komi=self.komi)
+        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_vert(self.last), last2=coord_flip_vert(self.last2), komi=self.komi, data=self.data)
 
     def flip_horiz(self):
         board = '\n'.join([' ' + l[1:][::-1] for l in self.board.split('\n')])
@@ -271,7 +271,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             if c is None:  return None
             return c // W * W + (W-1 - c % W)
         # XXX: Doesn't update ko properly
-        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_horiz(self.last), last2=coord_flip_horiz(self.last2), komi=self.komi)
+        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_horiz(self.last), last2=coord_flip_horiz(self.last2), komi=self.komi, data=self.data)
 
     def flip_both(self):
         board = '\n'.join(reversed([' ' + l[1:][::-1] for l in self.board[:-1].split('\n')])) + ' '
@@ -279,7 +279,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
             if c is None:  return None
             return (W-1 - c // W) * W + (W-1 - c % W)
         # XXX: Doesn't update ko properly
-        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_both(self.last), last2=coord_flip_both(self.last2), komi=self.komi)
+        return Position(board=board, cap=self.cap, n=self.n, ko=set(), last=coord_flip_both(self.last), last2=coord_flip_both(self.last2), komi=self.komi, data=self.data)
 
     def flip_random(self):
         pos = self
@@ -292,7 +292,7 @@ class Position(namedtuple('Position', 'board cap n ko last last2 komi')):
 
 def empty_position():
     """ Return an initial board position """
-    return Position(board=empty, cap=(0, 0), n=0, ko=set(), last=None, last2=None, komi=7.5)
+    return Position(board=empty, cap=(0, 0), n=0, ko=set(), last=None, last2=None, komi=7.5, data=dict())
 
 
 ########################
@@ -798,19 +798,25 @@ def gather_positions(filename, subsample=16):
             color, move = node.get_move()
             if move is not None:
                 c = (move[0]+1) * W + move[1]+1
+                pos.data['next'] = c
                 pos = pos.move(c)
             else:
+                pos.data['next'] = None
                 pos = pos.pass_move()
             if pos is None:
                 raise ValueError('invalid move %s' % (move,))
             pos_to_play[pos.n % 2].append(pos)
+        pos.data['next'] = None
 
     # subsample positions
     pos_to_play = [random.sample(pos_to_play[0], subsample//2), random.sample(pos_to_play[1], subsample//2)]
+
     # alternate positions and randomly rotate
     positions = list(chain(*zip(*pos_to_play)))
-    positions = [pos.flip_random() for pos in positions]
-    return (positions, score)
+
+    flipped = [pos.flip_random() for pos in positions]
+
+    return (flipped, score)
 
 
 def position_dist(worker_id, pos, disp=False):
@@ -823,7 +829,18 @@ def position_dist(worker_id, pos, disp=False):
     return tree.distribution()
 
 
-def replay_train(snapshot_interval=500, disp=True):
+def position_distnext(pos):
+    distribution = np.zeros(N * N + 1)
+    c = pos.data['next']
+    if c is not None:
+        x, y = c % W - 1, c // W - 1
+        distribution[y * N + x] = 1
+    else:
+        distribution[-1] = 1
+    return distribution
+
+
+def replay_train(snapshot_interval=500, continuous_predict=False, disp=True):
     n_workers = multiprocessing.cpu_count()
     # group up parallel predict requests
     # net.stash_size(max(2, 1))  # XXX not all workers will always be busy
@@ -831,6 +848,7 @@ def replay_train(snapshot_interval=500, disp=True):
     for i, f in enumerate(sys.stdin):
         f = f.rstrip()
         print('[%d] %s' % (i, f))
+
         try:
             positions, score = gather_positions(f, subsample=16)
         except ValueError:
@@ -838,7 +856,12 @@ def replay_train(snapshot_interval=500, disp=True):
             import traceback
             traceback.print_exc()
             continue
-        dist = Parallel(n_jobs=n_workers, verbose=100)(delayed(position_dist)(i, pos, disp) for i, pos in enumerate(positions))
+
+        if continuous_predict:
+            dist = Parallel(n_jobs=n_workers, verbose=100)(delayed(position_dist)(i, pos, disp) for i, pos in enumerate(positions))
+        else:
+            dist = [position_distnext(pos) for pos in positions]
+
         X_positions = list(zip(positions, dist))
         if disp:
             print_pos(X_positions[0][0], sys.stdout, None)
@@ -1026,6 +1049,8 @@ if __name__ == "__main__":
     elif sys.argv[1] == "replay_train":
         # find GoGoD-2008-Winter-Database/ -name '*.sgf' | shuf | python ./michi.py replay_train
         replay_train()
+    elif sys.argv[1] == "replay_traindist":
+        replay_train(continuous_predict=True)
     else:
         print('Unknown action', file=sys.stderr)
 

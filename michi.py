@@ -959,10 +959,10 @@ def gtp_io():
             tree = TreeNode(pos=empty_position())
             tree.expand()
         elif command[0] == "komi":
-            # XXX: can we do this nicer?!
+            # XXX: can we do this nicer
             tree.pos = Position(board=tree.pos.board, cap=(tree.pos.cap[0], tree.pos.cap[1]),
                                 n=tree.pos.n, ko=tree.pos.ko, last=tree.pos.last, last2=tree.pos.last2,
-                                komi=float(command[1]))
+                                komi=float(command[1]), data=dict())
         elif command[0] == "play":
             c = parse_coord(command[2])
             if c is not None:

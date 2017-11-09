@@ -75,7 +75,7 @@ class ResNet(object):
 
 
 class AGZeroModel:
-    def __init__(self, N, batch_size=32, archive_fit_samples=48):
+    def __init__(self, N, batch_size=32, archive_fit_samples=64):
         self.N = N
         self.batch_size = 32
 

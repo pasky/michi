@@ -683,7 +683,7 @@ def str_coord(c):
 
 # various main programs
 
-def play_and_train(i, batches_per_game=1, disp=False):
+def play_and_train(i, batches_per_game=2, disp=False):
     positions = []
 
     allow_resign = i > 25 and np.random.rand() < P_ALLOW_RESIGN
